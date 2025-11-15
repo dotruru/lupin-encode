@@ -1,0 +1,141 @@
+.external-llm-tab {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.external-llm-header {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.status-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.status-badge.jailbroken {
+  background: rgba(243, 139, 168, 0.2);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}
+
+.status-badge.uncracked {
+  background: rgba(166, 173, 200, 0.2);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+}
+
+.external-llm-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
+  margin-bottom: 80px;
+}
+
+.external-llm-empty {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  text-align: center;
+  padding: 2rem;
+}
+
+.external-llm-message {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  border-left: 3px solid transparent;
+  animation: messageSlideIn 0.3s ease;
+  transition: all 0.2s ease;
+}
+
+.external-llm-message:hover {
+  transform: translateX(4px);
+  box-shadow: 0 2px 8px var(--shadow-sm);
+}
+
+.external-llm-message.user {
+  background: var(--bg-tertiary);
+  border-left-color: var(--accent);
+  color: var(--text);
+}
+
+.external-llm-message.assistant {
+  background: var(--bg-secondary);
+  border-left-color: var(--primary);
+  color: var(--text);
+}
+
+.external-llm-message-header {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-bottom: 0.25rem;
+  font-weight: 600;
+}
+
+.external-llm-message-content {
+  white-space: pre-wrap;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.external-llm-loading {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  font-style: italic;
+  padding: 1rem;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.external-llm-input-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  backdrop-filter: blur(10px);
+  z-index: 100;
+}
+
+.external-llm-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  background: var(--bg-secondary);
+  color: var(--text);
+  transition: all 0.3s ease;
+}
+
+.external-llm-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(180, 190, 254, 0.15);
+  transform: translateY(-1px);
+}
+
+.external-llm-input::placeholder {
+  color: var(--text-dim);
+}
+
+.external-llm-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
