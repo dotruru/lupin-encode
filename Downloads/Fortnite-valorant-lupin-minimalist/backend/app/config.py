@@ -12,14 +12,14 @@ OPENROUTER_KEY = os.getenv(
 
 # HuggingFace API Key - Add your key here
 # Get one from: https://huggingface.co/settings/tokens
-HUGGINGFACE_API_KEY = os.getenv("HUGGINGFACE_API_KEY", "your_huggingface_key_here")  # Replace with actual key
+HUGGINGFACE_API_KEY = os.getenv("HUGGINGFACE_API_KEY", "")  # Set via environment variable
 
 # Perplexity API Key - Add your key here (optional)
 # Get one from: https://www.perplexity.ai/settings/api
 PERPLEXITY_API_KEY = os.getenv(
     "PERPLEXITY_API_KEY",
     ""  # Set via environment variable
-)  # Optional: Replace with actual key if available
+)
 
 # Search settings
 DEFAULT_SEARCH_TYPE = os.getenv("DEFAULT_SEARCH_TYPE", "web")  # "llm" for HuggingFace, "web" for Perplexity
@@ -46,9 +46,10 @@ FROM_EMAIL = os.getenv("FROM_EMAIL", "security@lupin-red-team.com")
 NOTIFICATION_ENABLED = os.getenv("NOTIFICATION_ENABLED", "true").lower() in ("1", "true", "yes")
 
 # Arc Blockchain Settings (Part B.1 - Safety Vault Integration)
-ARC_RPC_URL = os.getenv("ARC_RPC_URL", "")  # Arc RPC endpoint
-ARC_CHAIN_ID = int(os.getenv("ARC_CHAIN_ID", "0"))  # Arc chain ID
-ARC_USDC_ADDRESS = os.getenv("ARC_USDC_ADDRESS", "")  # USDC token contract on Arc
-ARC_VAULT_CONTRACT_ADDRESS = os.getenv("ARC_VAULT_CONTRACT_ADDRESS", "")  # LupinSafetyVault contract
-ARC_TESTER_PRIVATE_KEY = os.getenv("ARC_TESTER_PRIVATE_KEY", "")  # Backend oracle private key
+# Official Arc Testnet configuration from Circle docs
+ARC_RPC_URL = os.getenv("ARC_RPC_URL", "https://rpc.testnet.arc.network")  # Arc Testnet RPC
+ARC_CHAIN_ID = int(os.getenv("ARC_CHAIN_ID", "5042002"))  # Arc Testnet chain ID
+ARC_USDC_ADDRESS = os.getenv("ARC_USDC_ADDRESS", "0x3600000000000000000000000000000000000000")  # USDC ERC-20 (6 decimals)
+ARC_VAULT_CONTRACT_ADDRESS = os.getenv("ARC_VAULT_CONTRACT_ADDRESS", "")  # LupinSafetyVault contract (deploy first)
+ARC_TESTER_PRIVATE_KEY = os.getenv("ARC_TESTER_PRIVATE_KEY", "")  # Backend oracle private key (required)
 ARC_GAS_PRICE = os.getenv("ARC_GAS_PRICE", "")  # Optional: override gas price (in wei)

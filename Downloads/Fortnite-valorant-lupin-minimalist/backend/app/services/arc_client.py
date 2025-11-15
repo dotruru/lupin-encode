@@ -35,11 +35,12 @@ class ArcClient:
     
     def __init__(self):
         """Initialize Arc Web3 client with configuration"""
-        if not config.ARC_RPC_URL:
-            raise ArcClientError("ARC_RPC_URL not configured")
-        
+        # Check required configuration
         if not config.ARC_VAULT_CONTRACT_ADDRESS:
-            raise ArcClientError("ARC_VAULT_CONTRACT_ADDRESS not configured")
+            raise ArcClientError(
+                "ARC_VAULT_CONTRACT_ADDRESS not configured. "
+                "Deploy LupinSafetyVault.sol first, then set in .env"
+            )
         
         # Initialize Web3
         self.w3 = Web3(Web3.HTTPProvider(config.ARC_RPC_URL))

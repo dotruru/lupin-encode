@@ -7,18 +7,16 @@ pragma solidity ^0.8.20;
  * @dev Implements deterministic reward/penalty logic based on safety test scores
  * 
  * Spec: lupin_arc_build_spec.md Part A
- * - Custodies USDC (MVP) for multiple LLM projects
- * - Tracks per-project escrow, reward, and bounty balances
- * - Accepts test results from LUPIN backend (tester/oracle address)
- * - Applies deterministic rules for rewards and penalties
+ * Security: Added SafeERC20, ReentrancyGuard, and other protections
  */
 
-interface IERC20 {
-    function transfer(address to, uint256 amount) external returns (bool);
-    function transferFrom(address from, address to, uint256 amount) external returns (bool);
-}
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-contract LupinSafetyVault {
+contract LupinSafetyVault is ReentrancyGuard {
+    using SafeERC20 for IERC20;
+    
     // ============ Types & Structs (A3) ============
     
     struct Project {
@@ -146,6 +144,7 @@ contract LupinSafetyVault {
      * @param _usdc Address of USDC ERC-20 token
      */
     constructor(address _usdc) {
+        require(_usdc != address(0), "USDC address cannot be zero");
         admin = msg.sender;
         tester = msg.sender;  // Can be updated later
         usdc = IERC20(_usdc);
@@ -207,20 +206,17 @@ contract LupinSafetyVault {
         uint16 payoutRateBps,
         uint16 penaltyRateBps,
         uint256 initialDeposit
-    ) external whenNotGlobalPaused returns (uint256) {
+    ) external whenNotGlobalPaused nonReentrant returns (uint256) {
         require(minScore <= 100, "minScore must be <= 100");
         require(payoutRateBps <= 10_000, "payoutRateBps must be <= 10_000");
         require(penaltyRateBps <= 10_000, "penaltyRateBps must be <= 10_000");
         require(initialDeposit > 0, "initialDeposit must be > 0");
         
-        // Transfer USDC from caller
-        require(
-            usdc.transferFrom(msg.sender, address(this), initialDeposit),
-            "USDC transfer failed"
-        );
-        
         uint256 projectId = nextProjectId;
         nextProjectId++;
+        
+        // Transfer USDC from caller (using SafeERC20)
+        usdc.safeTransferFrom(msg.sender, address(this), initialDeposit);
         
         projects[projectId] = Project({
             owner: msg.sender,
@@ -259,15 +255,14 @@ contract LupinSafetyVault {
     function depositEscrow(uint256 projectId, uint256 amount)
         external
         whenNotGlobalPaused
+        nonReentrant
         onlyProjectOwner(projectId)
         projectActive(projectId)
     {
         require(amount > 0, "Amount must be > 0");
         
-        require(
-            usdc.transferFrom(msg.sender, address(this), amount),
-            "USDC transfer failed"
-        );
+        // Transfer using SafeERC20
+        usdc.safeTransferFrom(msg.sender, address(this), amount);
         
         projects[projectId].escrowBalance += amount;
         
@@ -364,52 +359,15 @@ contract LupinSafetyVault {
         
         Project storage project = projects[projectId];
         
-        // Update metrics
-        uint8 previousAvgScore = project.avgScore;
-        
-        if (project.testCount == 0) {
-            project.avgScore = score;
-        } else {
-            // Running average: (old_avg * count + new_score) / (count + 1)
-            uint256 newAvg = (uint256(project.avgScore) * project.testCount + score) / (project.testCount + 1);
-            project.avgScore = uint8(newAvg);
-        }
-        
-        project.lastScore = score;
-        project.testCount += 1;
-        project.lastTestTime = uint64(block.timestamp);
+        // Update metrics (simplified to avoid stack too deep)
+        _updateMetrics(project, score);
         
         // Apply reward/penalty logic
-        uint256 rewardAmount = 0;
-        uint256 penaltyAmount = 0;
-        
-        if (score >= project.minScore && project.escrowBalance > 0) {
-            // REWARD: score passes threshold
-            rewardAmount = project.escrowBalance * project.payoutRateBps / 10_000;
-            
-            if (rewardAmount > project.escrowBalance) {
-                rewardAmount = project.escrowBalance;
-            }
-            
-            project.escrowBalance -= rewardAmount;
-            project.rewardBalance += rewardAmount;
-            
-        } else if (score < project.minScore && project.escrowBalance > 0) {
-            // PENALTY: score fails threshold
-            penaltyAmount = project.escrowBalance * project.penaltyRateBps / 10_000;
-            
-            // Double penalty if critical failures present
-            if (criticalCount > 0) {
-                penaltyAmount = penaltyAmount * 2;
-            }
-            
-            if (penaltyAmount > project.escrowBalance) {
-                penaltyAmount = project.escrowBalance;
-            }
-            
-            project.escrowBalance -= penaltyAmount;
-            project.bountyPoolBalance += penaltyAmount;
-        }
+        (uint256 rewardAmount, uint256 penaltyAmount) = _applyRewardPenalty(
+            project,
+            score,
+            criticalCount
+        );
         
         emit TestResultRecorded(
             projectId,
@@ -424,6 +382,73 @@ contract LupinSafetyVault {
         );
     }
     
+    /**
+     * @dev Internal function to update metrics (avoid stack too deep)
+     */
+    function _updateMetrics(Project storage project, uint8 score) private {
+        if (project.testCount == 0) {
+            project.avgScore = score;
+        } else {
+            // Running average: (old_avg * count + new_score) / (count + 1)
+            uint256 newAvg = (uint256(project.avgScore) * project.testCount + score) / (project.testCount + 1);
+            project.avgScore = uint8(newAvg);
+        }
+        
+        project.lastScore = score;
+        project.testCount += 1;
+        project.lastTestTime = uint64(block.timestamp);
+    }
+    
+    /**
+     * @dev Internal function to apply reward/penalty logic (optimized for stack)
+     * @return rewardAmount Amount moved to rewards
+     * @return penaltyAmount Amount moved to bounty pool
+     */
+    function _applyRewardPenalty(
+        Project storage project,
+        uint8 score,
+        uint8 criticalCount
+    ) private returns (uint256 rewardAmount, uint256 penaltyAmount) {
+        // Cache storage reads to reduce stack pressure
+        uint256 escrow = project.escrowBalance;
+        
+        if (escrow == 0) {
+            return (0, 0);
+        }
+        
+        if (score >= project.minScore) {
+            // REWARD: score passes threshold
+            // Split calculation to reduce stack depth
+            uint256 payout = escrow * project.payoutRateBps;
+            rewardAmount = payout / 10_000;
+            
+            if (rewardAmount > escrow) {
+                rewardAmount = escrow;
+            }
+            
+            project.escrowBalance -= rewardAmount;
+            project.rewardBalance += rewardAmount;
+            penaltyAmount = 0;
+            
+        } else {
+            // PENALTY: score fails threshold
+            uint256 basePenalty = (escrow * project.penaltyRateBps) / 10_000;
+            
+            // Double penalty if critical failures present (ternary to save stack)
+            penaltyAmount = criticalCount > 0 ? basePenalty * 2 : basePenalty;
+            
+            if (penaltyAmount > escrow) {
+                penaltyAmount = escrow;
+            }
+            
+            project.escrowBalance -= penaltyAmount;
+            project.bountyPoolBalance += penaltyAmount;
+            rewardAmount = 0;
+        }
+        
+        return (rewardAmount, penaltyAmount);
+    }
+    
     // ============ Reward & Bounty Functions (A5.10-A5.12) ============
     
     /**
@@ -433,16 +458,21 @@ contract LupinSafetyVault {
     function withdrawRewards(uint256 projectId)
         external
         whenNotGlobalPaused
+        nonReentrant
         onlyProjectOwner(projectId)
     {
         require(projects[projectId].rewardBalance > 0, "No rewards to withdraw");
         
         uint256 amount = projects[projectId].rewardBalance;
+        address owner = projects[projectId].owner;
+        
+        // Update state before transfer (CEI pattern)
         projects[projectId].rewardBalance = 0;
         
-        require(usdc.transfer(projects[projectId].owner, amount), "USDC transfer failed");
+        // Use SafeERC20 for transfer
+        usdc.safeTransfer(owner, amount);
         
-        emit RewardsWithdrawn(projectId, projects[projectId].owner, amount);
+        emit RewardsWithdrawn(projectId, owner, amount);
     }
     
     /**
@@ -460,6 +490,7 @@ contract LupinSafetyVault {
     )
         external
         whenNotGlobalPaused
+        nonReentrant
         onlyProjectOwner(projectId)
     {
         require(researcher != address(0), "Researcher cannot be zero address");
@@ -479,14 +510,17 @@ contract LupinSafetyVault {
     function claimBounty(uint256 projectId)
         external
         whenNotGlobalPaused
+        nonReentrant
         projectExists(projectId)
     {
         uint256 pending = bounties[projectId][msg.sender];
         require(pending > 0, "No bounty to claim");
         
+        // Update state before transfer (CEI pattern)
         bounties[projectId][msg.sender] = 0;
         
-        require(usdc.transfer(msg.sender, pending), "USDC transfer failed");
+        // Use SafeERC20 for transfer
+        usdc.safeTransfer(msg.sender, pending);
         
         emit BountyClaimed(projectId, msg.sender, pending);
     }
@@ -496,9 +530,9 @@ contract LupinSafetyVault {
     /**
      * @notice Get full project details
      * @param projectId Project ID
-     * @return Project struct
+     * @return project Project struct
      */
-    function getProject(uint256 projectId) external view returns (Project memory) {
+    function getProject(uint256 projectId) external view returns (Project memory project) {
         require(projects[projectId].owner != address(0), "Project does not exist");
         return projects[projectId];
     }
@@ -538,4 +572,3 @@ contract LupinSafetyVault {
         return (project.lastScore, project.avgScore, project.testCount, project.lastTestTime);
     }
 }
-

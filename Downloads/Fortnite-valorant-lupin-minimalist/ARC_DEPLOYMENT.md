@@ -1,12 +1,23 @@
 # Arc Safety Vault Deployment Guide
 
-This guide covers deploying and configuring the LupinSafetyVault smart contract on Arc.
+This guide covers deploying and configuring the LupinSafetyVault smart contract on Arc Testnet.
+
+## Official Arc Testnet Info
+
+From Circle's documentation:
+
+- **Network**: Arc Testnet
+- **RPC URL**: `https://rpc.testnet.arc.network`
+- **Chain ID**: `5042002`
+- **USDC Address**: `0x3600000000000000000000000000000000000000` (6 decimals)
+- **Block Explorer**: https://testnet.arcscan.app
+- **Faucet**: https://faucet.circle.com/
 
 ## Prerequisites
 
-- Node.js and npm (for Hardhat/Foundry)
-- Arc wallet with testnet ETH for gas
-- USDC contract address on Arc
+- MetaMask or compatible Web3 wallet
+- Test USDC from Arc Testnet faucet (for gas)
+- Remix IDE (easiest) or Hardhat/Foundry
 - Backend tester wallet (will be the oracle)
 
 ## Step 1: Deploy Smart Contract
