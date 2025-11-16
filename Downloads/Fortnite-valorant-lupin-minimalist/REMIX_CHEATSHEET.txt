@@ -1,0 +1,199 @@
+================================================================================
+REMIX DEPLOYMENT - COPY-PASTE CHEATSHEET
+================================================================================
+
+YOUR WALLET: 0x51a61263b7485ac160f6f8f46fed5cce7b9e83d5
+
+================================================================================
+STEP 1: OPEN REMIX
+================================================================================
+
+URL: https://remix.ethereum.org
+
+================================================================================
+STEP 2: CREATE FILE IN REMIX
+================================================================================
+
+1. Click "New File" button (top left, + icon)
+2. Name it: LupinSafetyVault.sol
+3. Press Enter
+
+================================================================================
+STEP 3: COPY CONTRACT CODE
+================================================================================
+
+On your computer, open this file:
+/Users/arukanussipzhan/Downloads/Fortnite-valorant-lupin-minimalist/contracts/LupinSafetyVault_Remix.sol
+
+Select ALL (Cmd+A)
+Copy (Cmd+C)
+
+================================================================================
+STEP 4: PASTE IN REMIX
+================================================================================
+
+In Remix editor window:
+Paste (Cmd+V)
+Save (Cmd+S)
+
+WAIT 30 seconds for OpenZeppelin imports to download!
+
+================================================================================
+STEP 5: COMPILE
+================================================================================
+
+Click "Solidity Compiler" icon (left panel, S icon)
+
+Settings:
+┌─────────────────────────────┐
+│ Compiler: 0.8.24 ▼         │
+│ EVM: shanghai ▼             │
+│ ☑ Enable optimization       │ ← MUST BE CHECKED!
+│   Runs: 200                 │
+└─────────────────────────────┘
+
+Click: "Compile LupinSafetyVault.sol" button
+
+Wait for: ✅ Green checkmark
+
+================================================================================
+STEP 6: CONFIGURE METAMASK
+================================================================================
+
+Add Arc Testnet:
+┌─────────────────────────────────────────┐
+│ Network name: Arc Testnet               │
+│ RPC URL: https://rpc.testnet.arc.network │
+│ Chain ID: 5042002                       │
+│ Currency: USDC                          │
+│ Explorer: https://testnet.arcscan.app   │
+└─────────────────────────────────────────┘
+
+Switch to Arc Testnet network in MetaMask!
+
+================================================================================
+STEP 7: GET TEST USDC
+================================================================================
+
+URL: https://faucet.circle.com/
+
+Paste: 0x51a61263b7485ac160f6f8f46fed5cce7b9e83d5
+Select: Arc Testnet + USDC
+Click: Request
+
+Wait for tokens (check https://testnet.arcscan.app/address/0x51a61263b7485ac160f6f8f46fed5cce7b9e83d5)
+
+================================================================================
+STEP 8: DEPLOY IN REMIX
+================================================================================
+
+Click "Deploy" icon (left panel, Ethereum logo)
+
+Settings:
+┌──────────────────────────────────────────┐
+│ Environment: Injected Provider - MetaMask │ ← Select this
+│ Account: 0x51a6...83d5                    │ ← Auto-filled
+│ Contract: LupinSafetyVault ▼             │ ← Select this
+│                                           │
+│ Constructor _usdc (address):              │
+│ ┌───────────────────────────────────┐   │
+│ │ 0x3600000000000000000000000000000000000000 │ ← Paste USDC address
+│ └───────────────────────────────────┘   │
+│                                           │
+│ [ Deploy ] ← Click this orange button    │
+└──────────────────────────────────────────┘
+
+Confirm transaction in MetaMask popup!
+
+================================================================================
+STEP 9: COPY CONTRACT ADDRESS
+================================================================================
+
+After deployment (wait 30 seconds), look at bottom terminal:
+
+You'll see:
+  contract address: 0x1234567890... ← COPY THIS!
+
+Also visible under "Deployed Contracts" in left panel.
+
+================================================================================
+STEP 10: GENERATE TESTER WALLET
+================================================================================
+
+In terminal on your computer:
+
+cd /Users/arukanussipzhan/Downloads/Fortnite-valorant-lupin-minimalist
+python3 generate_tester_wallet.py
+
+Save the address and private key it shows!
+
+================================================================================
+STEP 11: SET TESTER
+================================================================================
+
+In Remix (Deployed Contracts section):
+
+Find: setTester function
+Enter: TESTER_ADDRESS_FROM_STEP_10
+Click: transact button
+Confirm: in MetaMask
+
+================================================================================
+STEP 12: CREATE BACKEND .ENV
+================================================================================
+
+Create file: backend/.env
+
+Paste this (fill in YOUR values):
+
+ARC_RPC_URL=https://rpc.testnet.arc.network
+ARC_CHAIN_ID=5042002
+ARC_USDC_ADDRESS=0x3600000000000000000000000000000000000000
+ARC_VAULT_CONTRACT_ADDRESS=0xYOUR_CONTRACT_FROM_STEP_9
+ARC_TESTER_PRIVATE_KEY=0xYOUR_TESTER_KEY_FROM_STEP_10
+
+OPENROUTER_KEY=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
+PERPLEXITY_API_KEY=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
+
+================================================================================
+STEP 13: START BACKEND
+================================================================================
+
+cd backend
+python3 -m pip install greenlet==3.0.3
+uvicorn app.main:app --reload
+
+Should see:
+✅ Arc client initialized
+✅ Tester address: 0x...
+✅ Chain ID: 5042002
+
+================================================================================
+STEP 14: START FRONTEND
+================================================================================
+
+New terminal:
+
+cd frontend
+npm run dev
+
+Open: http://localhost:5173
+Click: "ARC VAULT" tab
+
+================================================================================
+DONE! 🎉
+================================================================================
+
+You now have:
+✅ Contract deployed on Arc Testnet
+✅ Backend connected to blockchain
+✅ Frontend showing Arc Vault UI
+✅ Ready to create projects and run tests!
+
+Verification:
+- Contract: https://testnet.arcscan.app/address/YOUR_CONTRACT
+- Backend: http://localhost:8000/api/projects/stats/summary
+- Frontend: http://localhost:5173 (click ARC VAULT tab)
+
+================================================================================
+

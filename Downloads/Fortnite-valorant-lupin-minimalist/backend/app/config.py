@@ -3,6 +3,10 @@ Configuration file for API keys and settings.
 Store sensitive keys here (not committed to git).
 """
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # API Keys for external services
 OPENROUTER_KEY = os.getenv(
