@@ -199,7 +199,10 @@ body {
 }
 
 .tab-button {
-  padding: var(--space-sm) var(--space-md);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
   border: none;
   background: none;
   font-size: 0.875rem;
@@ -211,6 +214,30 @@ body {
   transition: all var(--duration-base) var(--ease-elegant);
   letter-spacing: 0;
   position: relative;
+}
+
+.tab-icon {
+  font-size: 1.2rem;
+  opacity: 0.7;
+  transition: all var(--duration-base);
+}
+
+.tab-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+}
+
+.tab-label {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.tab-hint {
+  font-size: 0.7rem;
+  opacity: 0.6;
+  font-weight: 400;
 }
 
 .tab-button::after {
@@ -228,6 +255,11 @@ body {
 .tab-button:hover {
   color: var(--text-primary);
   transform: translateY(-1px);
+}
+
+.tab-button:hover .tab-icon {
+  opacity: 1;
+  transform: scale(1.1);
 }
 
 .tab-navigation {
@@ -283,6 +315,14 @@ body {
 
 .tab-button.active::after {
   width: 100%;
+}
+
+.tab-button.active .tab-icon {
+  opacity: 1;
+}
+
+.tab-button.active .tab-label {
+  font-weight: 700;
 }
 
 .settings-button {

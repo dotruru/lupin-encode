@@ -18,7 +18,7 @@ const getInitialTheme = (): Theme => {
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'lupin' | 'exploits' | 'safety' | 'vault' | 'settings'>('lupin')
+  const [activeTab, setActiveTab] = useState<'lupin' | 'exploits' | 'safety' | 'vault' | 'settings'>('vault')
   const [theme, setTheme] = useState<Theme>(getInitialTheme)
   const [showPoliciesModal, setShowPoliciesModal] = useState(false)
 
@@ -42,7 +42,7 @@ function App() {
           <AnonymousLogo size={72} animate />
           <div className="header-text">
             <h1>LUPIN</h1>
-            <p className="subtitle">Jailbreak Agent and PIE Tracker</p>
+            <p className="subtitle">AI Safety Testing Platform with On-Chain Accountability on Arc</p>
           </div>
         </div>
         <div className="header-credit">
@@ -53,35 +53,56 @@ function App() {
       <div className="tab-bar">
         <div className="tab-navigation">
           <button
-            className={`tab-button ${activeTab === 'lupin' ? 'active' : ''}`}
-            onClick={() => setActiveTab('lupin')}
+            className={`tab-button ${activeTab === 'vault' ? 'active' : ''}`}
+            onClick={() => setActiveTab('vault')}
+            title="Create safety vaults, run tests, manage USDC escrow on Arc"
           >
-            LUPIN
+            <span className="tab-icon">🔒</span>
+            <span className="tab-text">
+              <span className="tab-label">SAFETY VAULT</span>
+              <span className="tab-hint">Arc Projects</span>
+            </span>
           </button>
           <button
             className={`tab-button ${activeTab === 'exploits' ? 'active' : ''}`}
             onClick={() => setActiveTab('exploits')}
+            title="Browse LLM jailbreaks and agent attack scenarios"
           >
-            EXPLOIT TRACKER
+            <span className="tab-icon">🔍</span>
+            <span className="tab-text">
+              <span className="tab-label">EXPLOITS</span>
+              <span className="tab-hint">CVE Database</span>
+            </span>
           </button>
           <button
             className={`tab-button ${activeTab === 'safety' ? 'active' : ''}`}
             onClick={() => setActiveTab('safety')}
+            title="Quick one-off LLM testing without Arc vault"
           >
-            TEST YOUR LLM
+            <span className="tab-icon">⚡</span>
+            <span className="tab-text">
+              <span className="tab-label">QUICK TEST</span>
+              <span className="tab-hint">Ad-hoc Testing</span>
+            </span>
           </button>
           <button
-            className={`tab-button ${activeTab === 'vault' ? 'active' : ''}`}
-            onClick={() => setActiveTab('vault')}
+            className={`tab-button ${activeTab === 'lupin' ? 'active' : ''}`}
+            onClick={() => setActiveTab('lupin')}
+            title="Interactive AI agent for research and analysis"
           >
-            ARC VAULT
+            <span className="tab-icon">💬</span>
+            <span className="tab-text">
+              <span className="tab-label">AGENT CHAT</span>
+              <span className="tab-hint">Research</span>
+            </span>
           </button>
         </div>
         <button
           className={`settings-button ${activeTab === 'settings' ? 'active' : ''}`}
           onClick={() => setActiveTab('settings')}
+          title="Configure API keys and preferences"
         >
-          SETTINGS
+          ⚙️ SETTINGS
         </button>
       </div>
 
