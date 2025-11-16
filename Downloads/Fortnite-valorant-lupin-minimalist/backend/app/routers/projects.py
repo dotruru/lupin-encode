@@ -3,12 +3,15 @@ Projects Router for Arc Safety Vault Integration
 Spec: lupin_arc_build_spec.md Part B.5
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from web3 import Web3
 import logging
+import json
+import asyncio
 
 from app.database import get_db
 from app.models import Project, TestRun, Exploit
@@ -474,6 +477,160 @@ async def run_safety_test(
     except Exception as e:
         logger.error(f"Failed to run safety test: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{project_id}/run-test-stream")
+async def run_safety_test_stream(
+    project_id: str,
+    api_key: str = Query(...),
+    max_exploits: int = Query(10),
+    test_mode: str = Query("llm"),
+    agent_endpoint: Optional[str] = Query(None),
+    agent_type: str = Query("general"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Run safety test with real-time SSE streaming of progress
+    Shows each exploit/scenario being tested in real-time
+    
+    Note: Uses GET (not POST) because EventSource only supports GET
+    """
+    if not arc_client:
+        raise HTTPException(status_code=503, detail="Arc client not configured")
+    
+    # Fetch project
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    async def event_generator():
+        try:
+            # Send start event
+            yield f"data: {json.dumps({'type': 'start', 'mode': test_mode})}\n\n"
+            await asyncio.sleep(0.1)
+            
+            if test_mode == "agent":
+                # Agent testing with streaming
+                if not agent_endpoint:
+                    yield f"data: {json.dumps({'type': 'error', 'message': 'agent_endpoint required'})}\n\n"
+                    return
+                
+                # Load scenarios
+                from app.models import AgentScenario
+                query = select(AgentScenario).where(AgentScenario.status == 'active').limit(max_exploits)
+                scenarios_result = await db.execute(query)
+                scenarios = scenarios_result.scalars().all()
+                
+                if not scenarios:
+                    yield f"data: {json.dumps({'type': 'error', 'message': 'No agent scenarios found'})}\n\n"
+                    return
+                
+                yield f"data: {json.dumps({'type': 'total', 'count': len(scenarios)})}\n\n"
+                
+                safe_count = 0
+                critical_count = 0
+                
+                for i, scenario in enumerate(scenarios):
+                    # Send testing event
+                    yield f"data: {json.dumps({'type': 'testing', 'index': i + 1, 'title': scenario.title, 'total': len(scenarios)})}\n\n"
+                    await asyncio.sleep(0.5)
+                    
+                    # Run test
+                    from app.services.agent_tester import AgentTester
+                    tester = AgentTester(api_key)
+                    try:
+                        result = await tester._test_scenario(scenario, agent_endpoint)
+                        
+                        is_safe = result.get('safe', False)
+                        if is_safe:
+                            safe_count += 1
+                        elif result.get('severity') in ['high', 'critical']:
+                            critical_count += 1
+                        
+                        # Send result event
+                        yield f"data: {json.dumps({'type': 'result', 'index': i + 1, 'safe': is_safe, 'title': scenario.title, 'tools': result.get('tools_called', []), 'violations': result.get('violations', [])})}\n\n"
+                    finally:
+                        await tester.close()
+                    
+                    await asyncio.sleep(0.3)
+                
+                score = int((safe_count / len(scenarios)) * 100) if scenarios else 0
+                
+            else:
+                # LLM testing with streaming
+                query = select(Exploit).where(Exploit.status == 'active').limit(max_exploits)
+                exploits_result = await db.execute(query)
+                exploits = exploits_result.scalars().all()
+                
+                if not exploits:
+                    yield f"data: {json.dumps({'type': 'error', 'message': 'No exploits found'})}\n\n"
+                    return
+                
+                yield f"data: {json.dumps({'type': 'total', 'count': len(exploits)})}\n\n"
+                
+                blocked_count = 0
+                critical_count = 0
+                
+                for i, exploit in enumerate(exploits):
+                    # Send testing event
+                    yield f"data: {json.dumps({'type': 'testing', 'index': i + 1, 'title': exploit.title, 'total': len(exploits)})}\n\n"
+                    await asyncio.sleep(0.5)
+                    
+                    # Run single exploit test
+                    from app.services.regression_tester import RegressionTester
+                    notification_config = {
+                        "smtp_host": config.SMTP_HOST,
+                        "smtp_port": config.SMTP_PORT,
+                        "smtp_user": config.SMTP_USER,
+                        "smtp_password": config.SMTP_PASSWORD,
+                        "from_email": config.FROM_EMAIL,
+                        "notification_enabled": False,  # Disable for streaming
+                        "perplexity_api_key": config.PERPLEXITY_API_KEY
+                    }
+                    notification_service = NotificationService(db, notification_config)
+                    tester = RegressionTester(api_key, notification_service=notification_service)
+                    
+                    try:
+                        # Test single exploit
+                        result_dict = await tester.test_exploit(exploit, project.target_model, db)
+                        is_blocked = result_dict.get('blocked', False)
+                        
+                        if is_blocked:
+                            blocked_count += 1
+                        elif exploit.severity in ['high', 'critical']:
+                            critical_count += 1
+                        
+                        # Send result event
+                        yield f"data: {json.dumps({'type': 'result', 'index': i + 1, 'safe': is_blocked, 'title': exploit.title, 'severity': exploit.severity})}\n\n"
+                    finally:
+                        await tester.close()
+                    
+                    await asyncio.sleep(0.3)
+                
+                score = int((blocked_count / len(exploits)) * 100) if exploits else 0
+            
+            # Record on-chain
+            yield f"data: {json.dumps({'type': 'recording', 'score': score})}\n\n"
+            await asyncio.sleep(0.5)
+            
+            new_exploit_hash = b'\x00' * 32
+            tx_hash = arc_client.record_test_result(
+                project_id=project.onchain_project_id,
+                score=score,
+                critical_count=critical_count,
+                new_exploit_hash=new_exploit_hash
+            )
+            
+            # Send complete event
+            yield f"data: {json.dumps({'type': 'complete', 'score': score, 'critical_count': critical_count, 'tx_hash': tx_hash})}\n\n"
+            
+        except Exception as e:
+            logger.error(f"Streaming test failed: {e}", exc_info=True)
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+    
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @router.get("/stats/summary")

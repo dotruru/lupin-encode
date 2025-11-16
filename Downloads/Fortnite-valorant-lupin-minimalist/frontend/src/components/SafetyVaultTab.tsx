@@ -111,6 +111,15 @@ export default function SafetyVaultTab() {
   const [createStep, setCreateStep] = useState<string>('')
   const [testMode, setTestMode] = useState<'llm' | 'agent'>('llm')
   const [agentEndpoint, setAgentEndpoint] = useState<string>('http://localhost:8000/api/mock-agent')
+  const [showTestProgress, setShowTestProgress] = useState(false)
+  const [testProgress, setTestProgress] = useState<{
+    total: number
+    current: number
+    currentTest: string
+    results: Array<{ safe: boolean; title: string; tools?: string[]; violations?: string[] }>
+    finalScore?: number
+    finalTxHash?: string
+  }>({ total: 0, current: 0, currentTest: '', results: [] })
 
   // Create project form
   const [formData, setFormData] = useState({
@@ -352,6 +361,102 @@ export default function SafetyVaultTab() {
     } catch (error) {
       console.error('Failed to fetch project details:', error)
       alert('Failed to fetch project details: ' + error)
+    }
+  }
+
+  const runSafetyTestRealtime = (projectId: string) => {
+    if (!apiKey.trim()) {
+      alert('Please set your OpenRouter API key in Settings first')
+      return
+    }
+
+    if (testMode === 'agent' && !agentEndpoint.trim()) {
+      alert('Please enter an agent API endpoint for agent testing')
+      return
+    }
+
+    setTestRunning(true)
+    setShowTestProgress(true)
+    setTestProgress({ total: 0, current: 0, currentTest: '', results: [] })
+
+    const params = new URLSearchParams({
+      api_key: apiKey,
+      max_exploits: '10',
+      test_mode: testMode
+    })
+
+    if (testMode === 'agent') {
+      params.append('agent_endpoint', agentEndpoint)
+      params.append('agent_type', 'general')
+    }
+
+    const eventSource = new EventSource(
+      `http://localhost:8000/api/projects/${projectId}/run-test-stream?${params}`
+    )
+
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+
+      switch (data.type) {
+        case 'start':
+          console.log('Test started:', data.mode)
+          break
+
+        case 'total':
+          setTestProgress(prev => ({ ...prev, total: data.count }))
+          break
+
+        case 'testing':
+          setTestProgress(prev => ({
+            ...prev,
+            current: data.index,
+            currentTest: data.title
+          }))
+          break
+
+        case 'result':
+          setTestProgress(prev => ({
+            ...prev,
+            results: [...prev.results, {
+              safe: data.safe,
+              title: data.title,
+              tools: data.tools,
+              violations: data.violations
+            }]
+          }))
+          break
+
+        case 'recording':
+          setTestProgress(prev => ({ ...prev, currentTest: 'Recording on-chain...' }))
+          break
+
+        case 'complete':
+          setTestProgress(prev => ({
+            ...prev,
+            finalScore: data.score,
+            finalTxHash: data.tx_hash,
+            currentTest: 'Complete!'
+          }))
+          eventSource.close()
+          setTestRunning(false)
+          void fetchProjects()
+          void fetchProjectDetails(projectId)
+          break
+
+        case 'error':
+          alert(`Test error: ${data.message}`)
+          eventSource.close()
+          setTestRunning(false)
+          setShowTestProgress(false)
+          break
+      }
+    }
+
+    eventSource.onerror = () => {
+      eventSource.close()
+      setTestRunning(false)
+      alert('Test stream failed. Check backend logs.')
+      setShowTestProgress(false)
     }
   }
 
@@ -890,7 +995,7 @@ export default function SafetyVaultTab() {
                   className="btn-test-large"
                   onClick={() => {
                     setSelectedProject(null)
-                    runSafetyTest(selectedProject.id)
+                    runSafetyTestRealtime(selectedProject.id)
                   }}
                   disabled={testRunning || !selectedProject.active}
                 >
@@ -1060,6 +1165,103 @@ export default function SafetyVaultTab() {
                   {creatingProject ? createStep || 'Creating...' : 'Create Project'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Real-Time Test Progress Modal */}
+      {showTestProgress && (
+        <div className="modal-overlay" onClick={() => testProgress.finalScore !== undefined && setShowTestProgress(false)}>
+          <div className="modal-content test-progress-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>{testMode === 'agent' ? '🤖 Agent Safety Test' : '🔒 LLM Jailbreak Test'}</h2>
+              {testProgress.finalScore !== undefined && (
+                <button className="close-btn" onClick={() => setShowTestProgress(false)}>×</button>
+              )}
+            </div>
+
+            <div className="modal-body">
+              {/* Progress Bar */}
+              {testProgress.total > 0 && (
+                <div className="progress-container">
+                  <div className="progress-bar">
+                    <div 
+                      className="progress-fill"
+                      style={{ width: `${(testProgress.current / testProgress.total) * 100}%` }}
+                    />
+                  </div>
+                  <p className="progress-text">
+                    {testProgress.current}/{testProgress.total} tests complete
+                  </p>
+                </div>
+              )}
+
+              {/* Current Test */}
+              {testProgress.currentTest && (
+                <div className="current-test">
+                  <h3>{testProgress.currentTest}</h3>
+                  {!testProgress.finalScore && <div className="spinner">⏳</div>}
+                </div>
+              )}
+
+              {/* Results List */}
+              <div className="results-list">
+                {testProgress.results.map((result, idx) => (
+                  <div key={idx} className={`result-item ${result.safe ? 'safe' : 'unsafe'}`}>
+                    <span className="result-icon">{result.safe ? '✅' : '❌'}</span>
+                    <span className="result-title">{result.title}</span>
+                    <span className="result-status">{result.safe ? 'BLOCKED' : 'BROKEN'}</span>
+                    {testMode === 'agent' && result.tools && result.tools.length > 0 && (
+                      <div className="result-details">
+                        Tools called: {result.tools.join(', ')}
+                      </div>
+                    )}
+                    {result.violations && result.violations.length > 0 && (
+                      <div className="result-violations">
+                        {result.violations.join('; ')}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Current Score */}
+              {testProgress.results.length > 0 && (
+                <div className="current-score-display">
+                  <h3>Current Score</h3>
+                  <div className="score-big">
+                    {Math.round((testProgress.results.filter(r => r.safe).length / testProgress.results.length) * 100)}%
+                  </div>
+                  <p>
+                    {testProgress.results.filter(r => r.safe).length} safe / {testProgress.results.length} total
+                  </p>
+                </div>
+              )}
+
+              {/* Final Result */}
+              {testProgress.finalScore !== undefined && testProgress.finalTxHash && (
+                <div className="final-result-banner">
+                  <h3>✅ Test Complete!</h3>
+                  <div className="final-score">
+                    Final Score: <strong>{testProgress.finalScore}/100</strong>
+                  </div>
+                  <a 
+                    href={`https://testnet.arcscan.app/tx/${testProgress.finalTxHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="arcscan-link"
+                  >
+                    View Transaction on ArcScan →
+                  </a>
+                  <button 
+                    className="btn-close-final"
+                    onClick={() => setShowTestProgress(false)}
+                  >
+                    Close
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
