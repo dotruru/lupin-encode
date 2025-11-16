@@ -589,19 +589,37 @@ export default function SafetyVaultTab() {
               // The project ID is usually in the data field for non-indexed parameters
               // or could be the first topic after the event signature for indexed parameters
               
-              // Try parsing from data field first (non-indexed uint256)
-              if (log.data && log.data !== '0x') {
+              // Try parsing from data field
+              // ProjectCreated event has: projectId, owner, minScore, payoutRateBps, penaltyRateBps
+              // If projectId is indexed, it won't be in data. If not indexed, it's the first value
+              if (log.data && log.data !== '0x' && log.data.length > 2) {
                 try {
-                  // Remove '0x' and take first 64 characters (32 bytes for uint256)
-                  const dataHex = log.data.slice(2, 66)
-                  const projectIdBigInt = BigInt('0x' + dataHex)
-                  const potentialId = Number(projectIdBigInt)
+                  console.log('Log data:', log.data)
+                  // Data is hex string without 0x prefix after removing it
+                  const dataWithoutPrefix = log.data.slice(2)
                   
-                  // Sanity check - project IDs should be small numbers
-                  if (potentialId > 0 && potentialId < 1000000) {
-                    onchainProjectId = potentialId
-                    console.log('Parsed project ID from data:', onchainProjectId)
-                    break
+                  // Each uint256 is 64 hex characters (32 bytes)
+                  // Try different positions in case projectId is at different locations
+                  const positions = [0, 64, 128, 192]; // First 4 possible positions
+                  
+                  for (const pos of positions) {
+                    if (dataWithoutPrefix.length >= pos + 64) {
+                      const valueHex = dataWithoutPrefix.slice(pos, pos + 64)
+                      const valueBigInt = BigInt('0x' + valueHex)
+                      const potentialId = Number(valueBigInt)
+                      
+                      console.log(`Position ${pos/64}: hex=${valueHex}, value=${potentialId}`)
+                      
+                      // Project IDs should be small sequential numbers
+                      // Skip values that look like parameters (90 for minScore, 500 for rates, etc)
+                      if (potentialId > 0 && potentialId < 100 && 
+                          potentialId !== 90 && potentialId !== 85 && // Common minScore values
+                          potentialId !== 500 && potentialId !== 300) { // Common rate values
+                        onchainProjectId = potentialId
+                        console.log('Found likely project ID from data:', onchainProjectId)
+                        break
+                      }
+                    }
                   }
                 } catch (e) {
                   console.log('Could not parse from data:', e)
@@ -610,20 +628,26 @@ export default function SafetyVaultTab() {
               
               // If not in data, check topics (for indexed parameters)
               if (!onchainProjectId && log.topics && log.topics.length > 1) {
+                console.log('Log topics:', log.topics)
                 // Skip topics[0] (event signature) and check others
                 for (let i = 1; i < log.topics.length; i++) {
                   try {
-                    const topicValue = BigInt(log.topics[i])
+                    const topicHex = log.topics[i]
+                    const topicValue = BigInt(topicHex)
                     const potentialId = Number(topicValue)
                     
-                    // Sanity check - project IDs should be small numbers
-                    if (potentialId > 0 && potentialId < 1000000) {
+                    console.log(`Topic[${i}]: hex=${topicHex}, value=${potentialId}`)
+                    
+                    // Project IDs should be small sequential numbers (likely 1-99)
+                    // Skip wallet addresses (these will be huge numbers)
+                    if (potentialId > 0 && potentialId < 100) {
                       onchainProjectId = potentialId
-                      console.log(`Parsed project ID from topic[${i}]:`, onchainProjectId)
+                      console.log(`Found likely project ID from topic[${i}]:`, onchainProjectId)
                       break
                     }
                   } catch (e) {
                     // Skip if not a valid number
+                    console.log(`Topic[${i}] not a valid number:`, e)
                   }
                 }
               }
