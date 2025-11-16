@@ -207,9 +207,12 @@
 }
 
 .empty-state-icon {
-  font-size: 4rem;
   margin-bottom: 1rem;
   animation: float 3s ease-in-out infinite;
+  color: var(--primary-color, #0066cc);
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 @keyframes float {
@@ -249,8 +252,8 @@
 }
 
 .feature-icon {
-  font-size: 2rem;
   flex-shrink: 0;
+  color: var(--primary-color, #0066cc);
 }
 
 .feature-item h4 {
@@ -361,6 +364,9 @@
 }
 
 .test-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   padding: 0.4rem 0.9rem;
   border-radius: 6px;
   font-size: 0.8rem;
@@ -912,12 +918,18 @@
 
 .spinner {
   font-size: 1.5rem;
-  animation: pulse 1.5s ease-in-out infinite;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+.clock-spin {
+  animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .results-list {
@@ -1165,6 +1177,9 @@
 }
 
 .score-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   font-weight: 700;
   font-size: 0.95rem;
   margin-left: 0.5rem;

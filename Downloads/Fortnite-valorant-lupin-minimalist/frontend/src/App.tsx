@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Lock, Search, Zap, MessageSquare, Settings as SettingsIcon } from 'lucide-react'
 import './App.css'
 import LupinTab from './components/LupinTab'
 import ExploitsTab from './components/ExploitsTab'
@@ -57,7 +58,7 @@ function App() {
             onClick={() => setActiveTab('vault')}
             title="Create safety vaults, run tests, manage USDC escrow on Arc"
           >
-            <span className="tab-icon">🔒</span>
+            <Lock className="tab-icon" size={20} />
             <span className="tab-text">
               <span className="tab-label">SAFETY VAULT</span>
               <span className="tab-hint">Arc Projects</span>
@@ -68,7 +69,7 @@ function App() {
             onClick={() => setActiveTab('exploits')}
             title="Browse LLM jailbreaks and agent attack scenarios"
           >
-            <span className="tab-icon">🔍</span>
+            <Search className="tab-icon" size={20} />
             <span className="tab-text">
               <span className="tab-label">EXPLOITS</span>
               <span className="tab-hint">CVE Database</span>
@@ -79,7 +80,7 @@ function App() {
             onClick={() => setActiveTab('safety')}
             title="Quick one-off LLM testing without Arc vault"
           >
-            <span className="tab-icon">⚡</span>
+            <Zap className="tab-icon" size={20} />
             <span className="tab-text">
               <span className="tab-label">QUICK TEST</span>
               <span className="tab-hint">Ad-hoc Testing</span>
@@ -90,7 +91,7 @@ function App() {
             onClick={() => setActiveTab('lupin')}
             title="Interactive AI agent for research and analysis"
           >
-            <span className="tab-icon">💬</span>
+            <MessageSquare className="tab-icon" size={20} />
             <span className="tab-text">
               <span className="tab-label">AGENT CHAT</span>
               <span className="tab-hint">Research</span>
@@ -102,7 +103,8 @@ function App() {
           onClick={() => setActiveTab('settings')}
           title="Configure API keys and preferences"
         >
-          ⚙️ SETTINGS
+          <SettingsIcon size={16} style={{ marginRight: '0.5rem' }} />
+          SETTINGS
         </button>
       </div>
 

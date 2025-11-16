@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { BrowserProvider, Contract, type Eip1193Provider } from 'ethers'
+import { Lock, Target, Zap, Eye, CheckCircle, XCircle, Clock, TrendingUp, Bot, ExternalLink, AlertCircle } from 'lucide-react'
 import './SafetyVaultTab.css'
 import { getStoredAPIKeys } from './SettingsTab'
 
@@ -751,7 +752,9 @@ export default function SafetyVaultTab() {
 
       {projects.length === 0 && !loading && (
         <div className="empty-state">
-          <div className="empty-state-icon">🔒</div>
+          <div className="empty-state-icon">
+            <Lock size={64} strokeWidth={1.5} />
+          </div>
           <h3>Welcome to Arc Safety Vault</h3>
           <p className="empty-state-tagline">
             Turn AI safety promises into programmable USDC commitments on Arc
@@ -759,28 +762,28 @@ export default function SafetyVaultTab() {
           
           <div className="empty-state-features">
             <div className="feature-item">
-              <span className="feature-icon">🎯</span>
+              <Target className="feature-icon" size={32} strokeWidth={1.5} />
               <div>
                 <h4>Lock USDC as Safety Collateral</h4>
                 <p>Create financial accountability for AI systems</p>
               </div>
             </div>
             <div className="feature-item">
-              <span className="feature-icon">🤖</span>
+              <Bot className="feature-icon" size={32} strokeWidth={1.5} />
               <div>
                 <h4>Test LLMs & Autonomous Agents</h4>
                 <p>Detect jailbreaks, tool misuse, and goal hijacking</p>
               </div>
             </div>
             <div className="feature-item">
-              <span className="feature-icon">⚡</span>
+              <Zap className="feature-icon" size={32} strokeWidth={1.5} />
               <div>
                 <h4>Automatic Rewards & Penalties</h4>
                 <p>Smart contract moves USDC based on safety scores</p>
               </div>
             </div>
             <div className="feature-item">
-              <span className="feature-icon">🔍</span>
+              <Eye className="feature-icon" size={32} strokeWidth={1.5} />
               <div>
                 <h4>100% Transparent on Arc</h4>
                 <p>All tests and fund movements verified on-chain</p>
@@ -820,13 +823,19 @@ export default function SafetyVaultTab() {
                 </div>
                 <div className="header-badges">
                   {!hasTested && (
-                    <span className="test-status-badge untested">⏳ NOT TESTED</span>
+                    <span className="test-status-badge untested">
+                      <Clock size={14} /> NOT TESTED
+                    </span>
                   )}
                   {hasTested && isPassing && (
-                    <span className="test-status-badge passing">✅ PASSING</span>
+                    <span className="test-status-badge passing">
+                      <CheckCircle size={14} /> PASSING
+                    </span>
                   )}
                   {hasTested && !isPassing && (
-                    <span className="test-status-badge failing">❌ FAILING</span>
+                    <span className="test-status-badge failing">
+                      <XCircle size={14} /> FAILING
+                    </span>
                   )}
                   <span className={`status-badge ${project.active ? 'active' : 'paused'}`}>
                     {project.active ? 'ACTIVE' : 'PAUSED'}
@@ -994,9 +1003,13 @@ export default function SafetyVaultTab() {
                       <div className="score-value">
                         Last Score: <strong>{selectedProject.last_score}/100</strong>
                         {selectedProject.last_score >= selectedProject.min_score ? (
-                          <span className="score-indicator passing"> ✅ PASSING</span>
+                          <span className="score-indicator passing">
+                            <CheckCircle size={16} /> PASSING
+                          </span>
                         ) : (
-                          <span className="score-indicator failing"> ❌ BELOW THRESHOLD</span>
+                          <span className="score-indicator failing">
+                            <XCircle size={16} /> BELOW THRESHOLD
+                          </span>
                         )}
                       </div>
                     </div>
@@ -1040,6 +1053,7 @@ export default function SafetyVaultTab() {
                         checked={testMode === 'llm'}
                         onChange={() => setTestMode('llm')}
                       />
+                      <Lock size={16} style={{ marginRight: '0.25rem' }} />
                       <span>LLM Jailbreak Test (default)</span>
                     </label>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
@@ -1050,7 +1064,8 @@ export default function SafetyVaultTab() {
                         checked={testMode === 'agent'}
                         onChange={() => setTestMode('agent')}
                       />
-                      <span>🤖 Agent Safety Test (NEW!)</span>
+                      <Bot size={16} style={{ marginRight: '0.25rem' }} />
+                      <span>Agent Safety Test (NEW!)</span>
                     </label>
                   </div>
                 </div>
@@ -1114,11 +1129,18 @@ export default function SafetyVaultTab() {
                       />
                     )}
                     
-                    <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.75rem' }}>
-                      {agentEndpointType === 'mock' 
-                        ? '🎭 Mock agent will simulate unsafe tool calls (~70% exploit success rate) to demonstrate penalties'
-                        : '🔌 Provide your agent API endpoint (OpenAI Assistant format)'
-                      }
+                    <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.75rem', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                      {agentEndpointType === 'mock' ? (
+                        <>
+                          <AlertCircle size={16} style={{ flexShrink: 0, marginTop: '0.1rem' }} />
+                          <span>Mock agent will simulate unsafe tool calls (~70% exploit success rate) to demonstrate penalties</span>
+                        </>
+                      ) : (
+                        <>
+                          <Bot size={16} style={{ flexShrink: 0, marginTop: '0.1rem' }} />
+                          <span>Provide your agent API endpoint (OpenAI Assistant format)</span>
+                        </>
+                      )}
                     </p>
                   </div>
                 )}
@@ -1309,7 +1331,10 @@ export default function SafetyVaultTab() {
         <div className="modal-overlay" onClick={() => testProgress.finalScore !== undefined && setShowTestProgress(false)}>
           <div className="modal-content test-progress-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>{testMode === 'agent' ? '🤖 Agent Safety Test' : '🔒 LLM Jailbreak Test'}</h2>
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                {testMode === 'agent' ? <Bot size={24} /> : <Lock size={24} />}
+                {testMode === 'agent' ? 'Agent Safety Test' : 'LLM Jailbreak Test'}
+              </h2>
               {testProgress.finalScore !== undefined && (
                 <button className="close-btn" onClick={() => setShowTestProgress(false)}>×</button>
               )}
@@ -1335,7 +1360,11 @@ export default function SafetyVaultTab() {
               {testProgress.currentTest && (
                 <div className="current-test">
                   <h3>{testProgress.currentTest}</h3>
-                  {!testProgress.finalScore && <div className="spinner">⏳</div>}
+                  {!testProgress.finalScore && (
+                    <div className="spinner">
+                      <Clock size={24} className="clock-spin" />
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1343,7 +1372,9 @@ export default function SafetyVaultTab() {
               <div className="results-list">
                 {testProgress.results.map((result, idx) => (
                   <div key={idx} className={`result-item ${result.safe ? 'safe' : 'unsafe'}`}>
-                    <span className="result-icon">{result.safe ? '✅' : '❌'}</span>
+                    <span className="result-icon">
+                      {result.safe ? <CheckCircle size={20} /> : <XCircle size={20} />}
+                    </span>
                     <span className="result-title">{result.title}</span>
                     <span className="result-status">{result.safe ? 'BLOCKED' : 'BROKEN'}</span>
                     {testMode === 'agent' && result.tools && result.tools.length > 0 && (
@@ -1376,7 +1407,10 @@ export default function SafetyVaultTab() {
               {/* Final Result */}
               {testProgress.finalScore !== undefined && testProgress.finalTxHash && (
                 <div className="final-result-banner">
-                  <h3>✅ Test Complete!</h3>
+                  <h3 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                    <CheckCircle size={24} />
+                    Test Complete!
+                  </h3>
                   <div className="final-score">
                     Final Score: <strong>{testProgress.finalScore}/100</strong>
                   </div>
@@ -1385,8 +1419,10 @@ export default function SafetyVaultTab() {
                     target="_blank"
                     rel="noopener noreferrer"
                     className="arcscan-link"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
                   >
-                    View Transaction on ArcScan →
+                    View Transaction on ArcScan
+                    <ExternalLink size={16} />
                   </a>
                   <button 
                     className="btn-close-final"
