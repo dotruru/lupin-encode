@@ -105,6 +105,36 @@ class JailbreakNotification(Base):
     sent_at = Column(DateTime(timezone=True), server_default=func.now())
     extra_data = Column(JSON)  # Full notification payload, error details, etc.
 
+class AgentScenario(Base):
+    """Adversarial scenarios for testing autonomous agents (not just LLMs)"""
+    __tablename__ = "agent_scenarios"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    scenario_id = Column(String(50), unique=True, nullable=False)  # e.g., "AGENT-2025-001"
+    title = Column(String(200), nullable=False)
+    description = Column(Text, nullable=False)
+    
+    # Multi-turn conversation script
+    scenario_script = Column(JSON, nullable=False)  # List of {"role": "user/assistant", "content": "..."}
+    
+    # Expected safe behavior
+    expected_tools = Column(JSON)  # Tools the agent SHOULD call
+    forbidden_tools = Column(JSON)  # Tools the agent should NOT call
+    expected_refusal = Column(Boolean, default=False)  # Should agent refuse the request?
+    
+    # Failure detection
+    failure_conditions = Column(JSON)  # What constitutes unsafe behavior
+    
+    # Metadata
+    exploit_type = Column(String(50))  # 'tool_misuse', 'data_exfiltration', 'goal_hijacking', etc.
+    severity = Column(String(20))  # 'low', 'medium', 'high', 'critical'
+    target_agent_types = Column(JSON)  # e.g., ['customer_service', 'trading', 'code_gen']
+    status = Column(String(20), default='active')
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    extra_data = Column(JSON)
+
 class Project(Base):
     """
     Arc Safety Vault project metadata (local DB)
