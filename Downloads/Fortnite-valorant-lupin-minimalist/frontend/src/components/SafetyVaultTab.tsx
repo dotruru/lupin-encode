@@ -575,20 +575,71 @@ export default function SafetyVaultTab() {
       // Parse ProjectCreated event to get projectId
       let onchainProjectId: number | null = null
       if (receipt && receipt.logs && receipt.logs.length > 0) {
-        // ProjectCreated event is typically the first log
-        // Event signature: ProjectCreated(uint256 indexed projectId, ...)
+        // Look for the ProjectCreated event in all logs
         try {
-          const log = receipt.logs[0]
-          if (log.topics && log.topics.length > 1) {
-            // topics[1] contains the projectId as a hex string
-            // Convert from hex to BigInt first, then to number
-            const projectIdHex = log.topics[1]
-            const projectIdBigInt = BigInt(projectIdHex)
-            onchainProjectId = Number(projectIdBigInt)
-            console.log('Parsed project ID:', onchainProjectId, 'from hex:', projectIdHex)
+          // ProjectCreated event signature
+          const PROJECT_CREATED_SIGNATURE = '0x' + 
+            '2c8e8349b2a6a9c9f8c0e7f3e4c5a5b5f1a5c5e5d5b5a5c5e5f5a5b5c5e5d5a5'  // This is a placeholder
+          
+          for (const log of receipt.logs) {
+            console.log('Log:', log)
+            
+            // Check if this is from the vault contract
+            if (log.address && log.address.toLowerCase() === VAULT_ADDRESS.toLowerCase()) {
+              // The project ID is usually in the data field for non-indexed parameters
+              // or could be the first topic after the event signature for indexed parameters
+              
+              // Try parsing from data field first (non-indexed uint256)
+              if (log.data && log.data !== '0x') {
+                try {
+                  // Remove '0x' and take first 64 characters (32 bytes for uint256)
+                  const dataHex = log.data.slice(2, 66)
+                  const projectIdBigInt = BigInt('0x' + dataHex)
+                  const potentialId = Number(projectIdBigInt)
+                  
+                  // Sanity check - project IDs should be small numbers
+                  if (potentialId > 0 && potentialId < 1000000) {
+                    onchainProjectId = potentialId
+                    console.log('Parsed project ID from data:', onchainProjectId)
+                    break
+                  }
+                } catch (e) {
+                  console.log('Could not parse from data:', e)
+                }
+              }
+              
+              // If not in data, check topics (for indexed parameters)
+              if (!onchainProjectId && log.topics && log.topics.length > 1) {
+                // Skip topics[0] (event signature) and check others
+                for (let i = 1; i < log.topics.length; i++) {
+                  try {
+                    const topicValue = BigInt(log.topics[i])
+                    const potentialId = Number(topicValue)
+                    
+                    // Sanity check - project IDs should be small numbers
+                    if (potentialId > 0 && potentialId < 1000000) {
+                      onchainProjectId = potentialId
+                      console.log(`Parsed project ID from topic[${i}]:`, onchainProjectId)
+                      break
+                    }
+                  } catch (e) {
+                    // Skip if not a valid number
+                  }
+                }
+              }
+            }
+          }
+          
+          // Fallback: assume it's the next sequential ID
+          if (!onchainProjectId) {
+            // Get current project count from the blockchain or use a simple counter
+            const existingProjects = projects.filter(p => p.onchain_project_id).map(p => p.onchain_project_id)
+            const maxId = existingProjects.length > 0 ? Math.max(...existingProjects) : 0
+            onchainProjectId = maxId + 1
+            console.log('Using sequential project ID:', onchainProjectId)
           }
         } catch (e) {
-          console.warn('Could not parse projectId from event, will check ArcScan:', e)
+          console.warn('Could not parse projectId from events:', e)
         }
       }
 
