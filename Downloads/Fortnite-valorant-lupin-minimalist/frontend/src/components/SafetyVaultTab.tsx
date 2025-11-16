@@ -118,9 +118,16 @@ export default function SafetyVaultTab() {
     total: number
     current: number
     currentTest: string
-    results: Array<{ safe: boolean; title: string; tools?: string[]; violations?: string[] }>
+    results: Array<{ safe: boolean; title: string; tools?: string[]; violations?: string[]; critical?: boolean; description?: string }>
     finalScore?: number
     finalTxHash?: string
+    usdcFlow?: {
+      escrow_change: number
+      rewards_change: number
+      bounty_change: number
+      total_penalty: number
+    }
+    isDemo?: boolean
   }>({ total: 0, current: 0, currentTest: '', results: [] })
 
   // Create project form
@@ -366,6 +373,97 @@ export default function SafetyVaultTab() {
     }
   }
 
+  const handleTestEvent = (data: any, eventSource: EventSource, projectId: string) => {
+    switch (data.type) {
+      case 'start':
+        console.log('Test started:', data.mode)
+        break
+
+      case 'total':
+        setTestProgress(prev => ({ ...prev, total: data.count }))
+        break
+
+      case 'testing':
+        setTestProgress(prev => ({
+          ...prev,
+          current: data.index,
+          currentTest: data.title
+        }))
+        break
+
+      case 'result':
+        setTestProgress(prev => ({
+          ...prev,
+          results: [...prev.results, {
+            safe: data.safe,
+            title: data.title,
+            tools: data.tools,
+            violations: data.violations,
+            critical: data.critical,
+            description: data.description
+          }]
+        }))
+        break
+
+      case 'recording':
+        setTestProgress(prev => ({ ...prev, currentTest: data.message || 'Recording on-chain...' }))
+        break
+
+      case 'complete':
+        setTestProgress(prev => ({
+          ...prev,
+          finalScore: data.score,
+          finalTxHash: data.tx_hash,
+          currentTest: 'Complete!',
+          usdcFlow: data.usdc_flow,
+          isDemo: data.is_demo
+        }))
+        
+        // Test completed
+        
+        eventSource.close()
+        setTestRunning(false)
+        if (!data.is_demo) {
+          void fetchProjects()
+          void fetchProjectDetails(projectId)
+        }
+        break
+
+      case 'error':
+        alert(`Test error: ${data.message}`)
+        eventSource.close()
+        setTestRunning(false)
+        setShowTestProgress(false)
+        break
+    }
+  }
+
+  const runDemoTest = (projectId: string, mode: 'passing' | 'failing' | 'mixed') => {
+    setTestRunning(true)
+    setShowTestProgress(true)
+    setTestProgress({ total: 0, current: 0, currentTest: '', results: [], isDemo: true })
+
+    const params = new URLSearchParams({
+      test_mode: mode
+    })
+
+    const eventSource = new EventSource(
+      `http://localhost:8000/api/projects/${projectId}/run-demo-test-stream?${params}`
+    )
+
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+      handleTestEvent(data, eventSource, projectId)
+    }
+
+    eventSource.onerror = () => {
+      eventSource.close()
+      setTestRunning(false)
+      alert('Demo test stream failed. Check backend logs.')
+      setShowTestProgress(false)
+    }
+  }
+
   const runSafetyTestRealtime = (projectId: string) => {
     if (!apiKey.trim()) {
       alert('Please set your OpenRouter API key in Settings first')
@@ -398,60 +496,7 @@ export default function SafetyVaultTab() {
 
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data)
-
-      switch (data.type) {
-        case 'start':
-          console.log('Test started:', data.mode)
-          break
-
-        case 'total':
-          setTestProgress(prev => ({ ...prev, total: data.count }))
-          break
-
-        case 'testing':
-          setTestProgress(prev => ({
-            ...prev,
-            current: data.index,
-            currentTest: data.title
-          }))
-          break
-
-        case 'result':
-          setTestProgress(prev => ({
-            ...prev,
-            results: [...prev.results, {
-              safe: data.safe,
-              title: data.title,
-              tools: data.tools,
-              violations: data.violations
-            }]
-          }))
-          break
-
-        case 'recording':
-          setTestProgress(prev => ({ ...prev, currentTest: 'Recording on-chain...' }))
-          break
-
-        case 'complete':
-          setTestProgress(prev => ({
-            ...prev,
-            finalScore: data.score,
-            finalTxHash: data.tx_hash,
-            currentTest: 'Complete!'
-          }))
-          eventSource.close()
-          setTestRunning(false)
-          void fetchProjects()
-          void fetchProjectDetails(projectId)
-          break
-
-        case 'error':
-          alert(`Test error: ${data.message}`)
-          eventSource.close()
-          setTestRunning(false)
-          setShowTestProgress(false)
-          break
-      }
+      handleTestEvent(data, eventSource, projectId)
     }
 
     eventSource.onerror = () => {
@@ -460,71 +505,6 @@ export default function SafetyVaultTab() {
       alert('Test stream failed. Check backend logs.')
       setShowTestProgress(false)
     }
-  }
-
-  const runSafetyTest = async (projectId: string) => {
-    if (!apiKey.trim()) {
-      alert('Please set your OpenRouter API key in Settings first')
-      return
-    }
-
-    if (testMode === 'agent' && !agentEndpoint.trim()) {
-      alert('Please enter an agent API endpoint for agent testing')
-      return
-    }
-
-    setTestRunning(true)
-    try {
-      const requestBody: any = {
-        api_key: apiKey,
-        max_exploits: 10,  // Optimized for cheap hackathon demo
-        test_mode: testMode
-      }
-
-      if (testMode === 'agent') {
-        requestBody.agent_endpoint = agentEndpoint
-        requestBody.agent_type = 'general'
-      }
-
-      const response = await fetch(`http://localhost:8000/api/projects/${projectId}/run-test`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.detail || 'Test failed')
-      }
-
-      const data = await response.json()
-      
-      const testTypeLabel = testMode === 'agent' ? 'Agent Safety Test' : 'LLM Jailbreak Test'
-      const metricsText = testMode === 'agent'
-        ? `Scenarios run: ${data.summary.total_scenarios}\n` +
-          `Safe behaviors: ${data.summary.safe_behaviors}\n` +
-          `Unsafe behaviors: ${data.summary.unsafe_behaviors}\n` +
-          `Critical failures: ${data.summary.critical_failures}`
-        : `Tests run: ${data.summary.total_tests}\n` +
-          `Blocked: ${data.summary.blocked_exploits}\n` +
-          `Broken: ${data.summary.successful_exploits}`
-      
-      alert(
-        `${testTypeLabel} complete!\n\n` +
-        `Score: ${data.score}/100\n` +
-        `Critical failures: ${data.critical_count}\n` +
-        `Transaction: ${data.tx_hash}\n\n` +
-        metricsText
-      )
-
-      // Refresh project data
-      await fetchProjectDetails(projectId)
-      await fetchProjects()
-    } catch (error) {
-      console.error('Safety test failed:', error)
-      alert('Safety test failed: ' + error)
-    }
-    setTestRunning(false)
   }
 
   const formatBalance = (balance?: number) => {
@@ -750,6 +730,37 @@ export default function SafetyVaultTab() {
         </div>
       </div>
 
+      {/* Hero Demo Banner for Judges */}
+      {!apiKey.trim() && projects.length > 0 && (
+        <div className="demo-hero-banner">
+          <div className="demo-hero-icon">
+            <Zap size={32} />
+          </div>
+          <div className="demo-hero-content">
+            <h3>DEMO MODE ACTIVE - No API Key Required!</h3>
+            <p>
+              Click <strong>DEMO FAIL</strong> on any project to see how an unsafe AI loses USDC automatically.
+              <br />
+              Click <strong>DEMO PASS</strong> to see how a safe AI earns rewards.
+            </p>
+            <div className="demo-steps">
+              <div className="demo-step">
+                <span className="step-number">1</span>
+                <span>AI is tested for safety</span>
+              </div>
+              <div className="demo-step">
+                <span className="step-number">2</span>
+                <span>Smart contract calculates penalty/reward</span>
+              </div>
+              <div className="demo-step">
+                <span className="step-number">3</span>
+                <span>USDC moves automatically on-chain</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {projects.length === 0 && !loading && (
         <div className="empty-state">
           <div className="empty-state-icon">
@@ -888,13 +899,34 @@ export default function SafetyVaultTab() {
                 >
                   VIEW DETAILS
                 </button>
-                <button
-                  className="btn-test"
-                  onClick={() => runSafetyTestRealtime(project.id)}
-                  disabled={testRunning || !project.active}
-                >
-                  {testRunning ? 'TESTING...' : 'RUN TEST'}
-                </button>
+                {apiKey.trim() ? (
+                  <button
+                    className="btn-test"
+                    onClick={() => runSafetyTestRealtime(project.id)}
+                    disabled={testRunning || !project.active}
+                  >
+                    {testRunning ? 'TESTING...' : 'RUN TEST'}
+                  </button>
+                ) : (
+                  <div className="demo-button-group">
+                    <button
+                      className="btn-demo-fail"
+                      onClick={() => runDemoTest(project.id, 'failing')}
+                      disabled={testRunning}
+                      title="Demo: AI fails safety test (30% safe)"
+                    >
+                      DEMO FAIL
+                    </button>
+                    <button
+                      className="btn-demo-pass"
+                      onClick={() => runDemoTest(project.id, 'passing')}
+                      disabled={testRunning}
+                      title="Demo: AI passes safety test (90% safe)"
+                    >
+                      DEMO PASS
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
             )
@@ -1414,19 +1446,81 @@ export default function SafetyVaultTab() {
                   <div className="final-score">
                     Final Score: <strong>{testProgress.finalScore}/100</strong>
                   </div>
-                  <a 
-                    href={`https://testnet.arcscan.app/tx/${testProgress.finalTxHash}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="arcscan-link"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
-                  >
-                    View Transaction on ArcScan
-                    <ExternalLink size={16} />
-                  </a>
+
+                  {/* USDC Flow Visualization */}
+                  {testProgress.usdcFlow && (
+                    <div className="usdc-flow-container">
+                      {testProgress.usdcFlow.total_penalty > 0 ? (
+                        <div className="penalty-flow">
+                          <div className="flow-message critical">
+                            <AlertCircle size={20} />
+                            <strong>PENALTY APPLIED!</strong>
+                          </div>
+                          <div className="flow-animation">
+                            <div className="flow-box escrow">
+                              <span className="flow-label">Escrow</span>
+                              <span className="flow-amount negative">-{testProgress.usdcFlow.total_penalty.toFixed(2)} USDC</span>
+                            </div>
+                            <div className="flow-arrow">→</div>
+                            <div className="flow-box bounty">
+                              <span className="flow-label">Bounty Pool</span>
+                              <span className="flow-amount positive">+{testProgress.usdcFlow.bounty_change.toFixed(2)} USDC</span>
+                            </div>
+                          </div>
+                          <p className="penalty-message">
+                            Your AI failed critical safety tests. {testProgress.usdcFlow.total_penalty.toFixed(2)} USDC has been moved to the bounty pool.
+                          </p>
+                        </div>
+                      ) : testProgress.usdcFlow.rewards_change > 0 ? (
+                        <div className="reward-flow">
+                          <div className="flow-message success">
+                            <TrendingUp size={20} />
+                            <strong>REWARD EARNED!</strong>
+                          </div>
+                          <div className="flow-animation">
+                            <div className="flow-box escrow">
+                              <span className="flow-label">Escrow</span>
+                              <span className="flow-amount">-{Math.abs(testProgress.usdcFlow.escrow_change).toFixed(2)} USDC</span>
+                            </div>
+                            <div className="flow-arrow">→</div>
+                            <div className="flow-box rewards">
+                              <span className="flow-label">Your Rewards</span>
+                              <span className="flow-amount positive">+{testProgress.usdcFlow.rewards_change.toFixed(2)} USDC</span>
+                            </div>
+                          </div>
+                          <p className="reward-message">
+                            Excellent! Your AI passed safety tests. {testProgress.usdcFlow.rewards_change.toFixed(2)} USDC has been added to your rewards.
+                          </p>
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+
+                  {testProgress.isDemo && (
+                    <div className="demo-badge">
+                      <AlertCircle size={16} />
+                      DEMO MODE - No real USDC was moved
+                    </div>
+                  )}
+
+                  {!testProgress.isDemo && (
+                    <a 
+                      href={`https://testnet.arcscan.app/tx/${testProgress.finalTxHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="arcscan-link"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+                    >
+                      View Transaction on ArcScan
+                      <ExternalLink size={16} />
+                    </a>
+                  )}
+                  
                   <button 
                     className="btn-close-final"
-                    onClick={() => setShowTestProgress(false)}
+                    onClick={() => {
+                      setShowTestProgress(false)
+                    }}
                   >
                     Close
                   </button>

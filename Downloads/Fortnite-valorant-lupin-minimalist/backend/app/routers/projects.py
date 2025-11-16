@@ -18,6 +18,7 @@ from app.models import Project, TestRun, Exploit
 from app.services.arc_client import arc_client, ArcClientError
 from app.services.regression_tester import RegressionTester
 from app.services.agent_tester import AgentTester
+from app.services.demo_service import DemoService
 from app.services.notification_service import NotificationService
 from app import config
 from pydantic import BaseModel
@@ -628,6 +629,121 @@ async def run_safety_test_stream(
             
         except Exception as e:
             logger.error(f"Streaming test failed: {e}", exc_info=True)
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+    
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.get("/{project_id}/run-demo-test-stream")
+async def run_demo_test_stream(
+    project_id: str,
+    test_mode: str = Query("failing", description="Demo mode: 'passing', 'failing', or 'mixed'"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Run a DEMO safety test without needing API keys (for hackathon judges)
+    Streams progress via Server-Sent Events
+    """
+    # Validate project
+    project_query = select(Project).filter(Project.id == project_id)
+    result = await db.execute(project_query)
+    project = result.scalar_one_or_none()
+    
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project {project_id} not found")
+    
+    async def event_generator():
+        try:
+            yield f"data: {json.dumps({'type': 'start', 'mode': 'demo', 'test_mode': test_mode})}\n\n"
+            
+            # Use demo scenarios
+            scenarios = DemoService.DEMO_SCENARIOS.copy()
+            yield f"data: {json.dumps({'type': 'total', 'count': len(scenarios)})}\n\n"
+            
+            results = []
+            safe_count = 0
+            critical_count = 0
+            
+            # Determine safety rates based on mode
+            safe_rate = 0.9 if test_mode == "passing" else 0.3 if test_mode == "failing" else 0.6
+            
+            for i, scenario in enumerate(scenarios, 1):
+                # Send testing event
+                yield f"data: {json.dumps({'type': 'testing', 'index': i, 'title': scenario['title']})}\n\n"
+                
+                # Simulate delay for dramatic effect
+                await asyncio.sleep(0.5)
+                
+                # Determine outcome
+                is_safe = (i % 3 != 0) if test_mode == "passing" else (i % 3 == 0) if test_mode == "failing" else (i % 2 == 0)
+                
+                # Force some critical failures in failing mode
+                if test_mode == "failing" and scenario["critical"] and i <= 3:
+                    is_safe = False
+                
+                if is_safe:
+                    safe_count += 1
+                else:
+                    if scenario["critical"]:
+                        critical_count += 1
+                
+                # Send result event
+                result_data = {
+                    'type': 'result',
+                    'safe': is_safe,
+                    'title': scenario['title'],
+                    'description': scenario['description'],
+                    'critical': scenario['critical'] and not is_safe
+                }
+                
+                # Add mock tool calls for agent tests
+                if not is_safe and test_mode == "failing":
+                    result_data['tools'] = ['execute_command', 'read_file', 'send_data']
+                    result_data['violations'] = ['Attempted unauthorized action']
+                
+                results.append(result_data)
+                yield f"data: {json.dumps(result_data)}\n\n"
+            
+            # Calculate final score
+            score = int((safe_count / len(scenarios)) * 100)
+            
+            # Send recording event
+            yield f"data: {json.dumps({'type': 'recording', 'message': 'Recording demo results...'})}\n\n"
+            await asyncio.sleep(1)
+            
+            # Calculate USDC flow
+            if project.escrow_balance and project.min_score and project.payout_rate_bps and project.penalty_rate_bps:
+                usdc_flow = DemoService.calculate_usdc_flow(
+                    score=score,
+                    min_score=project.min_score,
+                    escrow=project.escrow_balance / 1_000_000,  # Convert to USDC
+                    payout_rate=project.payout_rate_bps / 100,
+                    penalty_rate=project.penalty_rate_bps / 100
+                )
+            else:
+                usdc_flow = {
+                    "escrow_change": 0,
+                    "rewards_change": 0,
+                    "bounty_change": 0,
+                    "total_penalty": 0
+                }
+            
+            # Mock transaction hash for demo
+            mock_tx_hash = f"0xdemo{project_id[:8]}...{score:03d}"
+            
+            # Send complete event with USDC flow data
+            complete_data = {
+                'type': 'complete',
+                'score': score,
+                'critical_count': critical_count,
+                'tx_hash': mock_tx_hash,
+                'usdc_flow': usdc_flow,
+                'is_demo': True
+            }
+            yield f"data: {json.dumps(complete_data)}\n\n"
+            
+        except Exception as e:
+            logger.error(f"Demo test failed: {e}", exc_info=True)
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
     
     return StreamingResponse(event_generator(), media_type="text/event-stream")
