@@ -580,7 +580,12 @@ export default function SafetyVaultTab() {
         try {
           const log = receipt.logs[0]
           if (log.topics && log.topics.length > 1) {
-            onchainProjectId = Number(log.topics[1])
+            // topics[1] contains the projectId as a hex string
+            // Convert from hex to BigInt first, then to number
+            const projectIdHex = log.topics[1]
+            const projectIdBigInt = BigInt(projectIdHex)
+            onchainProjectId = Number(projectIdBigInt)
+            console.log('Parsed project ID:', onchainProjectId, 'from hex:', projectIdHex)
           }
         } catch (e) {
           console.warn('Could not parse projectId from event, will check ArcScan:', e)
@@ -1303,10 +1308,10 @@ export default function SafetyVaultTab() {
                     min="0"
                     max="100"
                     step="0.1"
-                    value={formData.payout_rate_bps / 100}
+                    value={formData.payout_rate_bps ? formData.payout_rate_bps / 100 : ''}
                     onChange={(e) => setFormData({
                       ...formData,
-                      payout_rate_bps: Math.round(parseFloat(e.target.value) * 100)
+                      payout_rate_bps: Math.round(parseFloat(e.target.value || '0') * 100)
                     })}
                   />
                   <span className="hint">Reward on pass (default 5%)</span>
@@ -1321,10 +1326,10 @@ export default function SafetyVaultTab() {
                     min="0"
                     max="100"
                     step="0.1"
-                    value={formData.penalty_rate_bps / 100}
+                    value={formData.penalty_rate_bps ? formData.penalty_rate_bps / 100 : ''}
                     onChange={(e) => setFormData({
                       ...formData,
-                      penalty_rate_bps: Math.round(parseFloat(e.target.value) * 100)
+                      penalty_rate_bps: Math.round(parseFloat(e.target.value || '0') * 100)
                     })}
                   />
                   <span className="hint">Penalty on fail (default 5%)</span>
