@@ -109,6 +109,8 @@ export default function SafetyVaultTab() {
   const [lastWithdrawTx, setLastWithdrawTx] = useState<string | null>(null)
   const [creatingProject, setCreatingProject] = useState(false)
   const [createStep, setCreateStep] = useState<string>('')
+  const [testMode, setTestMode] = useState<'llm' | 'agent'>('llm')
+  const [agentEndpoint, setAgentEndpoint] = useState<string>('')
 
   // Create project form
   const [formData, setFormData] = useState({
@@ -359,15 +361,28 @@ export default function SafetyVaultTab() {
       return
     }
 
+    if (testMode === 'agent' && !agentEndpoint.trim()) {
+      alert('Please enter an agent API endpoint for agent testing')
+      return
+    }
+
     setTestRunning(true)
     try {
+      const requestBody: any = {
+        api_key: apiKey,
+        max_exploits: 10,  // Optimized for cheap hackathon demo
+        test_mode: testMode
+      }
+
+      if (testMode === 'agent') {
+        requestBody.agent_endpoint = agentEndpoint
+        requestBody.agent_type = 'general'
+      }
+
       const response = await fetch(`http://localhost:8000/api/projects/${projectId}/run-test`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          api_key: apiKey,
-          max_exploits: 10  // Optimized for cheap hackathon demo
-        })
+        body: JSON.stringify(requestBody)
       })
 
       if (!response.ok) {
@@ -376,14 +391,23 @@ export default function SafetyVaultTab() {
       }
 
       const data = await response.json()
+      
+      const testTypeLabel = testMode === 'agent' ? 'Agent Safety Test' : 'LLM Jailbreak Test'
+      const metricsText = testMode === 'agent'
+        ? `Scenarios run: ${data.summary.total_scenarios}\n` +
+          `Safe behaviors: ${data.summary.safe_behaviors}\n` +
+          `Unsafe behaviors: ${data.summary.unsafe_behaviors}\n` +
+          `Critical failures: ${data.summary.critical_failures}`
+        : `Tests run: ${data.summary.total_tests}\n` +
+          `Blocked: ${data.summary.blocked_exploits}\n` +
+          `Broken: ${data.summary.successful_exploits}`
+      
       alert(
-        `Safety test complete!\n\n` +
+        `${testTypeLabel} complete!\n\n` +
         `Score: ${data.score}/100\n` +
         `Critical failures: ${data.critical_count}\n` +
         `Transaction: ${data.tx_hash}\n\n` +
-        `Tests run: ${data.summary.total_tests}\n` +
-        `Blocked: ${data.summary.blocked_exploits}\n` +
-        `Broken: ${data.summary.successful_exploits}`
+        metricsText
       )
 
       // Refresh project data
@@ -804,6 +828,62 @@ export default function SafetyVaultTab() {
                 </div>
               </div>
 
+              <div className="detail-section">
+                <h3>Test Configuration</h3>
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>
+                    Test Mode
+                  </label>
+                  <div style={{ display: 'flex', gap: '1rem' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                      <input
+                        type="radio"
+                        name="testMode"
+                        value="llm"
+                        checked={testMode === 'llm'}
+                        onChange={() => setTestMode('llm')}
+                      />
+                      <span>LLM Jailbreak Test (default)</span>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                      <input
+                        type="radio"
+                        name="testMode"
+                        value="agent"
+                        checked={testMode === 'agent'}
+                        onChange={() => setTestMode('agent')}
+                      />
+                      <span>🤖 Agent Safety Test (NEW!)</span>
+                    </label>
+                  </div>
+                </div>
+
+                {testMode === 'agent' && (
+                  <div style={{ marginTop: '1rem' }}>
+                    <label htmlFor="agent-endpoint" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>
+                      Agent API Endpoint
+                    </label>
+                    <input
+                      id="agent-endpoint"
+                      type="text"
+                      value={agentEndpoint}
+                      onChange={(e) => setAgentEndpoint(e.target.value)}
+                      placeholder="https://your-agent-api.com/v1/agent"
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        border: '1px solid #e0e0e0',
+                        borderRadius: '6px',
+                        fontSize: '0.95rem'
+                      }}
+                    />
+                    <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.5rem' }}>
+                      Tests agent for tool misuse, data exfiltration, and goal hijacking
+                    </p>
+                  </div>
+                )}
+              </div>
+
               <div className="modal-actions">
                 <button
                   className="btn-test-large"
@@ -813,7 +893,7 @@ export default function SafetyVaultTab() {
                   }}
                   disabled={testRunning || !selectedProject.active}
                 >
-                  {testRunning ? 'RUNNING TEST...' : 'RUN SAFETY TEST'}
+                  {testRunning ? 'RUNNING TEST...' : testMode === 'agent' ? 'RUN AGENT TEST' : 'RUN LLM TEST'}
                 </button>
                 <button
                   className="btn-withdraw"
