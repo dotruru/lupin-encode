@@ -111,6 +111,7 @@ export default function SafetyVaultTab() {
   const [createStep, setCreateStep] = useState<string>('')
   const [testMode, setTestMode] = useState<'llm' | 'agent'>('llm')
   const [agentEndpoint, setAgentEndpoint] = useState<string>('http://localhost:8000/api/mock-agent')
+  const [agentEndpointType, setAgentEndpointType] = useState<'mock' | 'custom'>('mock')
   const [showTestProgress, setShowTestProgress] = useState(false)
   const [testProgress, setTestProgress] = useState<{
     total: number
@@ -750,26 +751,87 @@ export default function SafetyVaultTab() {
 
       {projects.length === 0 && !loading && (
         <div className="empty-state">
-          <h3>No projects yet</h3>
-          <p>Create your first Arc Safety Vault project to start tracking LLM safety metrics on-chain.</p>
+          <div className="empty-state-icon">🔒</div>
+          <h3>Welcome to Arc Safety Vault</h3>
+          <p className="empty-state-tagline">
+            Turn AI safety promises into programmable USDC commitments on Arc
+          </p>
+          
+          <div className="empty-state-features">
+            <div className="feature-item">
+              <span className="feature-icon">🎯</span>
+              <div>
+                <h4>Lock USDC as Safety Collateral</h4>
+                <p>Create financial accountability for AI systems</p>
+              </div>
+            </div>
+            <div className="feature-item">
+              <span className="feature-icon">🤖</span>
+              <div>
+                <h4>Test LLMs & Autonomous Agents</h4>
+                <p>Detect jailbreaks, tool misuse, and goal hijacking</p>
+              </div>
+            </div>
+            <div className="feature-item">
+              <span className="feature-icon">⚡</span>
+              <div>
+                <h4>Automatic Rewards & Penalties</h4>
+                <p>Smart contract moves USDC based on safety scores</p>
+              </div>
+            </div>
+            <div className="feature-item">
+              <span className="feature-icon">🔍</span>
+              <div>
+                <h4>100% Transparent on Arc</h4>
+                <p>All tests and fund movements verified on-chain</p>
+              </div>
+            </div>
+          </div>
+          
           <button className="btn-create-large" onClick={() => void handleCreateProjectClick()}>
-            Create First Project
+            Create Your First Safety Vault
           </button>
+          
+          <p className="empty-state-hint">
+            <a href="https://github.com/dotruru/lupin-encode/blob/main/DEMO_GUIDE.md" target="_blank" rel="noopener noreferrer">
+              View Demo Guide
+            </a>
+            {' • '}
+            <a href="https://testnet.arcscan.app/address/0xC58975099823A60F101B62940d88e6c8De9A80b1" target="_blank" rel="noopener noreferrer">
+              View Contract on ArcScan
+            </a>
+          </p>
         </div>
       )}
 
       {projects.length > 0 && (
         <div className="projects-grid">
-          {projects.map((project) => (
-            <div key={project.id} className="project-card">
+          {projects.map((project) => {
+            const isPassing = project.last_score !== undefined && project.last_score >= project.min_score
+            const hasTested = project.test_count !== undefined && project.test_count > 0
+            const statusClass = !hasTested ? 'untested' : isPassing ? 'passing' : 'failing'
+            
+            return (
+            <div key={project.id} className={`project-card ${statusClass}`}>
               <div className="project-card-header">
                 <div>
                   <h3>{project.name || `Project #${project.onchain_project_id}`}</h3>
                   <p className="project-model">{project.target_model}</p>
                 </div>
-                <span className={`status-badge ${project.active ? 'active' : 'paused'}`}>
-                  {project.active ? 'ACTIVE' : 'PAUSED'}
-                </span>
+                <div className="header-badges">
+                  {!hasTested && (
+                    <span className="test-status-badge untested">⏳ NOT TESTED</span>
+                  )}
+                  {hasTested && isPassing && (
+                    <span className="test-status-badge passing">✅ PASSING</span>
+                  )}
+                  {hasTested && !isPassing && (
+                    <span className="test-status-badge failing">❌ FAILING</span>
+                  )}
+                  <span className={`status-badge ${project.active ? 'active' : 'paused'}`}>
+                    {project.active ? 'ACTIVE' : 'PAUSED'}
+                  </span>
+                </div>
               </div>
 
               <div className="project-metrics">
@@ -819,14 +881,15 @@ export default function SafetyVaultTab() {
                 </button>
                 <button
                   className="btn-test"
-                  onClick={() => runSafetyTest(project.id)}
+                  onClick={() => runSafetyTestRealtime(project.id)}
                   disabled={testRunning || !project.active}
                 >
                   {testRunning ? 'TESTING...' : 'RUN TEST'}
                 </button>
               </div>
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
@@ -905,13 +968,42 @@ export default function SafetyVaultTab() {
 
               <div className="detail-section">
                 <h3>Safety Metrics</h3>
-                <div className="metrics-large">
-                  <div className="metric-card">
-                    <span className="metric-label">Last Score</span>
-                    <span className="metric-big">
-                      {selectedProject.last_score !== undefined ? selectedProject.last_score : '--'}/100
-                    </span>
+                
+                {/* Visual Score Indicator */}
+                {selectedProject.last_score !== undefined && (
+                  <div className="score-gauge-container">
+                    <div className="score-gauge">
+                      <div className="gauge-track">
+                        <div 
+                          className={`gauge-fill ${selectedProject.last_score >= selectedProject.min_score ? 'passing' : 'failing'}`}
+                          style={{ width: `${selectedProject.last_score}%` }}
+                        />
+                        <div 
+                          className="gauge-threshold"
+                          style={{ left: `${selectedProject.min_score}%` }}
+                          title={`Threshold: ${selectedProject.min_score}%`}
+                        />
+                      </div>
+                      <div className="gauge-labels">
+                        <span>0</span>
+                        <span className="threshold-label">{selectedProject.min_score}% required</span>
+                        <span>100</span>
+                      </div>
+                    </div>
+                    <div className="score-status">
+                      <div className="score-value">
+                        Last Score: <strong>{selectedProject.last_score}/100</strong>
+                        {selectedProject.last_score >= selectedProject.min_score ? (
+                          <span className="score-indicator passing"> ✅ PASSING</span>
+                        ) : (
+                          <span className="score-indicator failing"> ❌ BELOW THRESHOLD</span>
+                        )}
+                      </div>
+                    </div>
                   </div>
+                )}
+                
+                <div className="metrics-large">
                   <div className="metric-card">
                     <span className="metric-label">Average Score</span>
                     <span className="metric-big">
@@ -965,26 +1057,68 @@ export default function SafetyVaultTab() {
 
                 {testMode === 'agent' && (
                   <div style={{ marginTop: '1rem' }}>
-                    <label htmlFor="agent-endpoint" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>
-                      Agent API Endpoint
+                    <label style={{ display: 'block', marginBottom: '0.75rem', fontWeight: 600 }}>
+                      Agent Endpoint
                     </label>
-                    <input
-                      id="agent-endpoint"
-                      type="text"
-                      value={agentEndpoint}
-                      onChange={(e) => setAgentEndpoint(e.target.value)}
-                      placeholder="http://localhost:8000/api/mock-agent"
-                      style={{
-                        width: '100%',
-                        padding: '0.75rem',
-                        border: '1px solid #e0e0e0',
-                        borderRadius: '6px',
-                        fontSize: '0.95rem'
-                      }}
-                    />
-                    <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.5rem' }}>
-                      Tests agent for tool misuse, data exfiltration, and goal hijacking<br/>
-                      <strong>Default:</strong> Mock agent (pre-filled) • Or use your own agent API
+                    
+                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', flex: 1, padding: '0.75rem', border: agentEndpointType === 'mock' ? '2px solid #0066cc' : '1px solid #e0e0e0', borderRadius: '8px', background: agentEndpointType === 'mock' ? '#e7f3ff' : 'white' }}>
+                        <input
+                          type="radio"
+                          name="agentEndpointType"
+                          value="mock"
+                          checked={agentEndpointType === 'mock'}
+                          onChange={() => {
+                            setAgentEndpointType('mock')
+                            setAgentEndpoint('http://localhost:8000/api/mock-agent')
+                          }}
+                        />
+                        <div>
+                          <div style={{ fontWeight: 600 }}>Mock Agent (Demo)</div>
+                          <div style={{ fontSize: '0.8rem', color: '#666' }}>70% vulnerable - shows penalties</div>
+                        </div>
+                      </label>
+                      
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', flex: 1, padding: '0.75rem', border: agentEndpointType === 'custom' ? '2px solid #0066cc' : '1px solid #e0e0e0', borderRadius: '8px', background: agentEndpointType === 'custom' ? '#e7f3ff' : 'white' }}>
+                        <input
+                          type="radio"
+                          name="agentEndpointType"
+                          value="custom"
+                          checked={agentEndpointType === 'custom'}
+                          onChange={() => {
+                            setAgentEndpointType('custom')
+                            setAgentEndpoint('')
+                          }}
+                        />
+                        <div>
+                          <div style={{ fontWeight: 600 }}>Custom Endpoint</div>
+                          <div style={{ fontSize: '0.8rem', color: '#666' }}>Your own agent API</div>
+                        </div>
+                      </label>
+                    </div>
+                    
+                    {agentEndpointType === 'custom' && (
+                      <input
+                        id="agent-endpoint"
+                        type="text"
+                        value={agentEndpoint}
+                        onChange={(e) => setAgentEndpoint(e.target.value)}
+                        placeholder="https://your-agent-api.com/v1/chat"
+                        style={{
+                          width: '100%',
+                          padding: '0.75rem',
+                          border: '1px solid #e0e0e0',
+                          borderRadius: '6px',
+                          fontSize: '0.95rem'
+                        }}
+                      />
+                    )}
+                    
+                    <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.75rem' }}>
+                      {agentEndpointType === 'mock' 
+                        ? '🎭 Mock agent will simulate unsafe tool calls (~70% exploit success rate) to demonstrate penalties'
+                        : '🔌 Provide your agent API endpoint (OpenAI Assistant format)'
+                      }
                     </p>
                   </div>
                 )}
