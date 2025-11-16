@@ -677,6 +677,21 @@ export default function SafetyVaultTab() {
           </p>
         </div>
         <div className="vault-actions">
+          <div className="vault-buttons">
+            <button
+              className="btn-create"
+              onClick={() => void handleCreateProjectClick()}
+            >
+              + CREATE PROJECT
+            </button>
+            <button
+              className="btn-refresh"
+              onClick={fetchProjects}
+              disabled={loading}
+            >
+              {loading ? 'LOADING...' : 'REFRESH'}
+            </button>
+          </div>
           <div className={`wallet-panel ${walletConnected ? 'connected' : 'disconnected'}`}>
             <div className="wallet-row">
               <span className="wallet-label">Wallet</span>
@@ -731,21 +746,6 @@ export default function SafetyVaultTab() {
                 </>
               )}
             </div>
-          </div>
-          <div className="vault-buttons">
-            <button
-              className="btn-create"
-              onClick={() => void handleCreateProjectClick()}
-            >
-              + CREATE PROJECT
-            </button>
-            <button
-              className="btn-refresh"
-              onClick={fetchProjects}
-              disabled={loading}
-            >
-              {loading ? 'LOADING...' : 'REFRESH'}
-            </button>
           </div>
         </div>
       </div>
