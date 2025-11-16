@@ -110,7 +110,7 @@ export default function SafetyVaultTab() {
   const [creatingProject, setCreatingProject] = useState(false)
   const [createStep, setCreateStep] = useState<string>('')
   const [testMode, setTestMode] = useState<'llm' | 'agent'>('llm')
-  const [agentEndpoint, setAgentEndpoint] = useState<string>('')
+  const [agentEndpoint, setAgentEndpoint] = useState<string>('http://localhost:8000/api/mock-agent')
 
   // Create project form
   const [formData, setFormData] = useState({
@@ -868,7 +868,7 @@ export default function SafetyVaultTab() {
                       type="text"
                       value={agentEndpoint}
                       onChange={(e) => setAgentEndpoint(e.target.value)}
-                      placeholder="https://your-agent-api.com/v1/agent"
+                      placeholder="http://localhost:8000/api/mock-agent"
                       style={{
                         width: '100%',
                         padding: '0.75rem',
@@ -878,7 +878,8 @@ export default function SafetyVaultTab() {
                       }}
                     />
                     <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.5rem' }}>
-                      Tests agent for tool misuse, data exfiltration, and goal hijacking
+                      Tests agent for tool misuse, data exfiltration, and goal hijacking<br/>
+                      <strong>Default:</strong> Mock agent (pre-filled) • Or use your own agent API
                     </p>
                   </div>
                 )}
