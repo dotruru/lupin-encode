@@ -135,4 +135,42 @@
 
 ---
 
-If you’d like, I can now draft the exact TypeScript/ethers code you need to drop into `SafetyVaultTab.tsx` to implement the **approve + createProject + register** flow in the UI, keeping it minimal for the 5‑hour window.
+---
+
+## ✅ Implementation Status
+
+### Completed (Ready for Demo)
+
+- ✅ **Wallet-driven Create Project flow** (`SafetyVaultTab.tsx`)
+  - Full approve → createProject → backend register from UI
+  - Shows step-by-step progress ("Approving USDC...", "Creating on-chain...", "Registering...")
+  - Parses `ProjectCreated` event for automatic `projectId` extraction
+  - Success message with ArcScan link
+
+- ✅ **ABI definitions** for USDC and Vault interactions in frontend
+
+- ✅ **Cheap demo tests** (max_exploits = 10, down from 50)
+
+- ✅ **RPC fallback support** in `hardhat.config.js`:
+  - `arcTestnet` (default)
+  - `arcTestnetBlockdaemon`
+  - `arcTestnetDRPC`
+  - `arcTestnetQuicknode`
+
+- ✅ **Backend ABI wiring** (`backend/app/contracts/LupinSafetyVault.json` from Hardhat artifacts)
+
+- ✅ **Frontend config template** (`frontend/ENV_CONFIG.md`)
+
+- ✅ **Demo guide** (`DEMO_GUIDE.md`) with 5-minute walkthrough
+
+### Ready to Test
+
+1. Use the GitHub bypass link to push
+2. Open **http://localhost:5173** → ARC VAULT tab
+3. Connect wallet (Arc Testnet)
+4. Click **+ CREATE PROJECT** → fill form → **Create Project**
+5. Confirm 2 MetaMask txs (approve + createProject)
+6. Project appears automatically
+7. Click **RUN TEST** → see on-chain results
+
+All core roadmap tasks for hackathon demo are complete! 🚀

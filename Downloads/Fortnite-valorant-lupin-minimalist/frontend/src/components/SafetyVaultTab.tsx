@@ -24,6 +24,34 @@ interface Project {
   created_at: string
 }
 
+const USDC_ABI = [
+  {
+    inputs: [
+      { internalType: 'address', name: 'spender', type: 'address' },
+      { internalType: 'uint256', name: 'amount', type: 'uint256' }
+    ],
+    name: 'approve',
+    outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  }
+] as const
+
+const VAULT_CREATE_PROJECT_ABI = [
+  {
+    inputs: [
+      { internalType: 'uint8', name: 'minScore', type: 'uint8' },
+      { internalType: 'uint16', name: 'payoutRateBps', type: 'uint16' },
+      { internalType: 'uint16', name: 'penaltyRateBps', type: 'uint16' },
+      { internalType: 'uint256', name: 'initialDeposit', type: 'uint256' }
+    ],
+    name: 'createProject',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  }
+] as const
+
 const VAULT_WITHDRAW_ABI = [
   {
     inputs: [
@@ -61,6 +89,7 @@ const REQUIRED_CHAIN_ID = toNumberChainId(import.meta.env.VITE_ARC_CHAIN_ID)
 const REQUIRED_CHAIN_LABEL = REQUIRED_CHAIN_ID ? `Chain #${REQUIRED_CHAIN_ID}` : 'Arc network'
 const REQUIRED_CHAIN_HEX = REQUIRED_CHAIN_ID ? `0x${REQUIRED_CHAIN_ID.toString(16)}` : null
 const VAULT_ADDRESS = (import.meta.env.VITE_ARC_VAULT_ADDRESS || '').trim()
+const USDC_ADDRESS = '0x3600000000000000000000000000000000000000'
 
 const getEthereumProvider = () => (typeof window === 'undefined' ? undefined : window.ethereum)
 
@@ -78,6 +107,8 @@ export default function SafetyVaultTab() {
   const [withdrawInFlight, setWithdrawInFlight] = useState(false)
   const [pendingTxHash, setPendingTxHash] = useState<string | null>(null)
   const [lastWithdrawTx, setLastWithdrawTx] = useState<string | null>(null)
+  const [creatingProject, setCreatingProject] = useState(false)
+  const [createStep, setCreateStep] = useState<string>('')
 
   // Create project form
   const [formData, setFormData] = useState({
@@ -335,7 +366,7 @@ export default function SafetyVaultTab() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           api_key: apiKey,
-          max_exploits: 50
+          max_exploits: 10  // Optimized for cheap hackathon demo
         })
       })
 
@@ -383,6 +414,126 @@ export default function SafetyVaultTab() {
   const formatTimestamp = (timestamp?: number) => {
     if (!timestamp) return 'Never'
     return new Date(timestamp * 1000).toLocaleDateString()
+  }
+
+  const handleCreateProject = async () => {
+    if (!VAULT_ADDRESS) {
+      alert('Vault address not configured. Set VITE_ARC_VAULT_ADDRESS in frontend/.env')
+      return
+    }
+
+    const ready = await ensureWalletReady()
+    if (!ready || !walletAddress) {
+      alert('Wallet not ready. Connect to Arc Testnet first.')
+      return
+    }
+
+    const provider = getEthereumProvider()
+    if (!provider) {
+      alert('Wallet provider unavailable')
+      return
+    }
+
+    try {
+      setCreatingProject(true)
+      setWalletError(null)
+
+      const browserProvider = new BrowserProvider(provider as Eip1193Provider)
+      const signer = await browserProvider.getSigner()
+
+      // Convert deposit to wei (6 decimals for USDC)
+      const depositAmount = BigInt(Math.floor(parseFloat(formData.initial_deposit) * 1_000_000))
+
+      // Step 1: Approve USDC
+      setCreateStep('Approving USDC...')
+      const usdcContract = new Contract(USDC_ADDRESS, USDC_ABI, signer)
+      const approveTx = await usdcContract.approve(VAULT_ADDRESS, depositAmount)
+      await approveTx.wait()
+
+      // Step 2: Call createProject
+      setCreateStep('Creating project on-chain...')
+      const vaultContract = new Contract(VAULT_ADDRESS, VAULT_CREATE_PROJECT_ABI, signer)
+      const createTx = await vaultContract.createProject(
+        formData.min_score,
+        formData.payout_rate_bps,
+        formData.penalty_rate_bps,
+        depositAmount
+      )
+      const receipt = await createTx.wait()
+
+      // Parse ProjectCreated event to get projectId
+      let onchainProjectId: number | null = null
+      if (receipt && receipt.logs && receipt.logs.length > 0) {
+        // ProjectCreated event is typically the first log
+        // Event signature: ProjectCreated(uint256 indexed projectId, ...)
+        try {
+          const log = receipt.logs[0]
+          if (log.topics && log.topics.length > 1) {
+            onchainProjectId = Number(log.topics[1])
+          }
+        } catch (e) {
+          console.warn('Could not parse projectId from event, will check ArcScan:', e)
+        }
+      }
+
+      if (!onchainProjectId) {
+        alert(`Project created on-chain!\nTransaction: ${createTx.hash}\n\nCheck ArcScan for projectId, then manually register via backend.`)
+        setShowCreateForm(false)
+        setCreatingProject(false)
+        setCreateStep('')
+        return
+      }
+
+      // Step 3: Register with backend
+      setCreateStep('Registering with backend...')
+      const registerPayload = {
+        onchain_project_id: onchainProjectId,
+        owner_address: walletAddress,
+        name: formData.name || `Project #${onchainProjectId}`,
+        target_model: formData.target_model
+      }
+      console.log('Registering project with backend:', registerPayload)
+      
+      const registerResponse = await fetch('http://localhost:8000/api/projects/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(registerPayload)
+      })
+
+      if (!registerResponse.ok) {
+        const error = await registerResponse.json()
+        const errorMsg = error.detail || JSON.stringify(error)
+        throw new Error(`Backend registration failed: ${errorMsg}`)
+      }
+
+      // Success!
+      alert(
+        `✅ Project created successfully!\n\n` +
+        `On-chain ID: ${onchainProjectId}\n` +
+        `Transaction: ${createTx.hash}\n` +
+        `Escrow: ${formData.initial_deposit} USDC\n\n` +
+        `View on ArcScan:\nhttps://testnet.arcscan.app/tx/${createTx.hash}`
+      )
+
+      setShowCreateForm(false)
+      setFormData({
+        name: '',
+        target_model: 'z-ai/glm-4.5-air:free',
+        min_score: 90,
+        payout_rate_bps: 500,
+        penalty_rate_bps: 500,
+        initial_deposit: '100'
+      })
+      await fetchProjects()
+    } catch (error) {
+      console.error('Project creation failed:', error)
+      const message = error instanceof Error ? error.message : 'Project creation failed'
+      alert(`❌ Error: ${message}`)
+      setWalletError(message)
+    } finally {
+      setCreatingProject(false)
+      setCreateStep('')
+    }
   }
 
   return (
@@ -714,8 +865,10 @@ export default function SafetyVaultTab() {
               </div>
 
               <div className="form-group">
-                <label>Project Name (Optional)</label>
+                <label htmlFor="project-name">Project Name (Optional)</label>
                 <input
+                  id="project-name"
+                  name="projectName"
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -724,8 +877,10 @@ export default function SafetyVaultTab() {
               </div>
 
               <div className="form-group">
-                <label>Target Model *</label>
+                <label htmlFor="target-model">Target Model *</label>
                 <input
+                  id="target-model"
+                  name="targetModel"
                   type="text"
                   value={formData.target_model}
                   onChange={(e) => setFormData({ ...formData, target_model: e.target.value })}
@@ -736,8 +891,10 @@ export default function SafetyVaultTab() {
 
               <div className="form-row">
                 <div className="form-group">
-                  <label>Min Safety Score *</label>
+                  <label htmlFor="min-score">Min Safety Score *</label>
                   <input
+                    id="min-score"
+                    name="minScore"
                     type="number"
                     min="0"
                     max="100"
@@ -748,8 +905,10 @@ export default function SafetyVaultTab() {
                 </div>
 
                 <div className="form-group">
-                  <label>Initial Deposit (USDC) *</label>
+                  <label htmlFor="initial-deposit">Initial Deposit (USDC) *</label>
                   <input
+                    id="initial-deposit"
+                    name="initialDeposit"
                     type="number"
                     min="0"
                     step="0.01"
@@ -762,8 +921,10 @@ export default function SafetyVaultTab() {
 
               <div className="form-row">
                 <div className="form-group">
-                  <label>Payout Rate (%) *</label>
+                  <label htmlFor="payout-rate">Payout Rate (%) *</label>
                   <input
+                    id="payout-rate"
+                    name="payoutRate"
                     type="number"
                     min="0"
                     max="100"
@@ -778,8 +939,10 @@ export default function SafetyVaultTab() {
                 </div>
 
                 <div className="form-group">
-                  <label>Penalty Rate (%) *</label>
+                  <label htmlFor="penalty-rate">Penalty Rate (%) *</label>
                   <input
+                    id="penalty-rate"
+                    name="penaltyRate"
                     type="number"
                     min="0"
                     max="100"
@@ -794,15 +957,26 @@ export default function SafetyVaultTab() {
                 </div>
               </div>
 
+              {createStep && (
+                <div className="info-banner" style={{ marginTop: '1rem', background: '#fff3cd', borderColor: '#ffc107', color: '#856404' }}>
+                  {createStep}
+                </div>
+              )}
+
               <div className="form-actions">
-                <button className="btn-cancel" onClick={() => setShowCreateForm(false)}>
+                <button 
+                  className="btn-cancel" 
+                  onClick={() => setShowCreateForm(false)}
+                  disabled={creatingProject}
+                >
                   Cancel
                 </button>
                 <button
                   className="btn-submit"
-                  onClick={() => alert('Wallet integration required. This will:\n1. Connect Arc wallet\n2. Approve USDC\n3. Call createProject()\n4. Register with backend\n\nComing soon!')}
+                  onClick={() => void handleCreateProject()}
+                  disabled={creatingProject || !formData.target_model || !walletConnected}
                 >
-                  Create Project (Wallet Required)
+                  {creatingProject ? createStep || 'Creating...' : 'Create Project'}
                 </button>
               </div>
             </div>
