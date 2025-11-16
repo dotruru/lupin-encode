@@ -43,8 +43,8 @@ ARC_GAS_PRICE=               # Optional: leave empty for auto
 # API Keys (Keep Your Existing Values)
 # ============================================
 
-OPENROUTER_KEY=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
-PERPLEXITY_API_KEY=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
+OPENROUTER_KEY=your_openrouter_key_here
+PERPLEXITY_API_KEY=your_perplexity_key_here
 HUGGINGFACE_API_KEY=your_huggingface_key_here
 
 DEFAULT_SEARCH_TYPE=web
